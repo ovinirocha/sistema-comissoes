@@ -1,0 +1,206 @@
+import { useState, useEffect } from 'react';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { db } from '../firebase';
+import { Link } from 'react-router-dom';
+import * as XLSX from 'xlsx';
+
+function Geral() {
+  const [contratosMes, setContratosMes] = useState([]);
+  const [busca, setBusca] = useState('');
+  const [mesFiltro, setMesFiltro] = useState(new Date().getMonth() + 1);
+
+  useEffect(() => {
+    const q = query(collection(db, 'lancamentos'), orderBy('dataLancamento', 'desc'));
+    
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const listaDoMes = [];
+      
+      querySnapshot.forEach((doc) => {
+        const c = doc.data();
+        let mesDoContrato = -1;
+        
+        if (c.dataLancamento) {
+          if (typeof c.dataLancamento.toDate === 'function') {
+            mesDoContrato = c.dataLancamento.toDate().getMonth() + 1;
+          } else {
+            mesDoContrato = new Date(c.dataLancamento).getMonth() + 1;
+          }
+        } else {
+          mesDoContrato = new Date().getMonth() + 1;
+        }
+
+        if (mesDoContrato === Number(mesFiltro)) {
+          listaDoMes.push({ id: doc.id, ...c });
+        }
+      });
+      
+      setContratosMes(listaDoMes);
+    });
+
+    return () => unsubscribe();
+  }, [mesFiltro]);
+
+  const listaFiltrada = contratosMes.filter((c) =>
+    c.marca?.toLowerCase().includes(busca.toLowerCase()) ||
+    c.vendedor?.toLowerCase().includes(busca.toLowerCase()) ||
+    c.contrato?.toLowerCase().includes(busca.toLowerCase())
+  );
+
+  // Regrinha para evitar que o fuso horário mude o dia (Inverte AAAA-MM-DD para DD/MM/AAAA)
+  const formatarDataBR = (dataString) => {
+    if (!dataString) return '';
+    const partes = dataString.split('-');
+    if (partes.length === 3) {
+      return `${partes[2]}/${partes[1]}/${partes[0]}`;
+    }
+    return dataString;
+  };
+
+  const exportarExcelGeral = () => {
+    const linhasGeral = listaFiltrada.map((c) => {
+      
+      // Formata Taxa Federal no Excel
+      const statusTaxa = c.statusTaxaFederal || 'Em Aberto';
+      let infoTaxa = statusTaxa;
+      if (Number(c.valorTaxaFederal) > 0) {
+        infoTaxa = `R$ ${Number(c.valorTaxaFederal).toFixed(2)} - ${statusTaxa}`;
+        if (statusTaxa === 'Pago' && c.dataPagTaxaFederal) {
+          infoTaxa += ` (${c.formaPagTaxaFederal || 'S/N'} dia ${formatarDataBR(c.dataPagTaxaFederal)})`;
+        }
+      }
+
+      // Formata Assessoria no Excel (AGORA COM DATA!)
+      const statusAss = c.statusAssessoria || 'Em Aberto';
+      let infoAssessoria = `R$ ${Number(c.valorAssessoria || 0).toFixed(2)} - ${statusAss}`;
+      if (statusAss === 'Pago' && c.dataPagAssessoria) {
+        infoAssessoria += ` (${c.formaPagAssessoria || 'S/N'} dia ${formatarDataBR(c.dataPagAssessoria)})`;
+      }
+
+      return {
+        'COLABORADOR': c.vendedor || '-',
+        'MARCAS': c.marca || '-',
+        'TELEFONE': c.telefone || '-',
+        'TAXA / VALOR / DATA': infoTaxa,
+        'N* CONTRATO': c.contrato || '-',
+        'N* OS': c.os || '-',
+        'OBSERVAÇÃO': c.observacao || '-',
+        'VALOR DE CONTRATO': infoAssessoria
+      };
+    });
+
+    const planilha = XLSX.utils.json_to_sheet(linhasGeral);
+    const arquivo = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(arquivo, planilha, 'Planilha Geral');
+    XLSX.writeFile(arquivo, `Fechamento_Geral_Mes_${mesFiltro}.xlsx`);
+  };
+
+  const imprimirPDFGeral = () => {
+    window.print();
+  };
+
+  return (
+    <div style={{ padding: '40px 20px', backgroundColor: '#f0f2f5', minHeight: '100vh' }}>
+      <div className="container-geral" style={{ backgroundColor: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', maxWidth: '1300px', margin: '0 auto' }}>
+        
+        <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', gap: '15px', flexWrap: 'wrap' }}>
+          <h2 style={{ color: '#333', margin: 0 }}>📋 Planilha Geral do Mês</h2>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#f8f9fa', padding: '8px 15px', borderRadius: '8px', border: '1px solid #ddd' }}>
+            <label style={{ fontWeight: 'bold', color: '#555' }}>Competência:</label>
+            <select value={mesFiltro} onChange={(e) => setMesFiltro(e.target.value)} style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '16px' }}>
+              <option value={1}>Janeiro</option><option value={2}>Fevereiro</option><option value={3}>Março</option>
+              <option value={4}>Abril</option><option value={5}>Maio</option><option value={6}>Junho</option>
+              <option value={7}>Julho</option><option value={8}>Agosto</option><option value={9}>Setembro</option>
+              <option value={10}>Outubro</option><option value={11}>Novembro</option><option value={12}>Dezembro</option>
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button onClick={imprimirPDFGeral} style={btnPdf}>📄 Imprimir / PDF</button>
+            <button onClick={exportarExcelGeral} style={btnExcel}>📊 Baixar Excel Geral</button>
+            <Link to="/painel" style={btnVoltar}>⬅ Voltar</Link>
+          </div>
+        </div>
+
+        <div className="no-print" style={{ marginBottom: '20px' }}>
+          <input type="text" placeholder="🔍 Filtrar planilha por marca, vendedor ou contrato..." value={busca} onChange={(e) => setBusca(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '15px' }} />
+        </div>
+
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <table className="tabela-print" style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #94a3b8', minWidth: '1100px' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#1e293b', color: 'white' }}>
+                <th style={thStyle}>COLABORADOR</th>
+                <th style={thStyle}>MARCAS</th>
+                <th style={thStyle}>TELEFONE</th>
+                <th style={thStyle}>TAXA / VALOR / DATA</th>
+                <th style={thStyle}>Nº CONTRATO</th>
+                <th style={thStyle}>Nº OS</th>
+                <th style={thStyle}>OBSERVAÇÃO</th>
+                <th style={thStyle}>VALOR DE CONTRATO</th>
+              </tr>
+            </thead>
+            <tbody>
+              {listaFiltrada.map((c, index) => {
+                
+                const statusAss = c.statusAssessoria || 'Em Aberto';
+                const statusTaxa = c.statusTaxaFederal || 'Em Aberto';
+
+                return (
+                  <tr key={c.id} style={{ backgroundColor: index % 2 === 0 ? '#ffffff' : '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                    <td style={{ ...tdStyle, fontWeight: 'bold', color: '#0284c7' }}>{c.vendedor}</td>
+                    <td style={tdStyle}>{c.marca}</td>
+                    <td style={{ ...tdStyle, color: '#475569' }}>{c.telefone || '-'}</td>
+                    
+                    {/* COLUNA: TAXA FEDERAL (Agora com a data visível!) */}
+                    <td style={tdStyle}>
+                      <strong>R$ {Number(c.valorTaxaFederal || 0).toFixed(2)}</strong> <br/>
+                      <span className="badge-status" style={{ fontSize: '11px', padding: '3px 6px', borderRadius: '4px', backgroundColor: statusTaxa === 'Pago' ? '#d4edda' : '#fff3cd', color: statusTaxa === 'Pago' ? '#155724' : '#856404', display: 'inline-block', marginTop: '4px', fontWeight: 'bold' }}>
+                        {statusTaxa} {statusTaxa === 'Pago' && c.dataPagTaxaFederal ? `(${c.formaPagTaxaFederal} dia ${formatarDataBR(c.dataPagTaxaFederal)})` : ''}
+                      </span>
+                    </td>
+                    
+                    <td style={{ ...tdStyle, fontWeight: 'bold' }}>{c.contrato || '-'}</td>
+                    <td style={tdStyle}>{c.os || '-'}</td>
+                    <td style={{ ...tdStyle, fontStyle: 'italic', color: '#dc3545', maxWidth: '200px', wordBreak: 'break-word' }}>{c.observacao || '-'}</td>
+                    
+                    {/* COLUNA: ASSESSORIA (Agora com a data visível!) */}
+                    <td style={tdStyle}>
+                      <strong>R$ {Number(c.valorAssessoria || 0).toFixed(2)}</strong> <br/>
+                      <span className="badge-status" style={{ fontSize: '11px', padding: '3px 6px', borderRadius: '4px', backgroundColor: statusAss === 'Pago' ? '#d4edda' : '#fff3cd', color: statusAss === 'Pago' ? '#155724' : '#856404', display: 'inline-block', marginTop: '4px', fontWeight: 'bold' }}>
+                        {statusAss} {statusAss === 'Pago' && c.dataPagAssessoria ? `(${c.formaPagAssessoria} dia ${formatarDataBR(c.dataPagAssessoria)})` : ''}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {listaFiltrada.length === 0 && <p style={{ textAlign: 'center', marginTop: '30px', color: '#64748b' }}>Nenhum contrato encontrado nesta competência.</p>}
+      </div>
+
+      <style>
+        {`
+          @media print {
+            body { background-color: white !important; margin: 0; padding: 0; }
+            .no-print { display: none !important; }
+            .container-geral { box-shadow: none !important; padding: 0 !important; max-width: 100% !important; margin: 0 !important; }
+            .tabela-print { border-collapse: collapse !important; width: 100% !important; }
+            .tabela-print th { background-color: #1e293b !important; color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: 8px !important; }
+            .tabela-print td { padding: 6px !important; font-size: 11px !important; border: 1px solid #ddd !important; }
+            .badge-status { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          }
+        `}
+      </style>
+    </div>
+  );
+}
+
+const thStyle = { padding: '12px 10px', textAlign: 'left', fontSize: '13px', border: '1px solid #cbd5e1' };
+const tdStyle = { padding: '12px 10px', fontSize: '13px', border: '1px solid #e2e8f0' };
+const btnPdf = { padding: '10px 15px', backgroundColor: '#17a2b8', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' };
+const btnExcel = { padding: '10px 15px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' };
+const btnVoltar = { padding: '10px 15px', backgroundColor: '#6c757d', color: 'white', textDecoration: 'none', borderRadius: '4px', fontWeight: 'bold' };
+
+export default Geral;

@@ -3,7 +3,6 @@ import { collection, addDoc, onSnapshot, query, orderBy, doc, updateDoc, deleteD
 import { db, auth } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { Link, useNavigate } from 'react-router-dom';
-// NOVO: Importando as notificações modernas
 import toast, { Toaster } from 'react-hot-toast';
 
 function Painel() {
@@ -18,30 +17,43 @@ function Painel() {
     }
   };
 
+  // Campos Básicos (Vendedor vê)
   const [marca, setMarca] = useState('');
   const [contrato, setContrato] = useState('');
   const [os, setOs] = useState('');
-  const [valor, setValor] = useState('');
-  const [status, setStatus] = useState('Em Aberto');
-
   const [vendedorSelecionado, setVendedorSelecionado] = useState('');
-  const [vendedoresLista, setVendedoresLista] = useState([]);
+  const [telefone, setTelefone] = useState(''); // ADICIONADO: Estado do telefone
+  const [observacao, setObservacao] = useState(''); 
+  
+  // Campos Assessoria (Só Financeiro edita)
+  const [valorAssessoria, setValorAssessoria] = useState('');
+  const [statusAssessoria, setStatusAssessoria] = useState('Em Aberto');
+  const [formaPagAssessoria, setFormaPagAssessoria] = useState('');
+  const [dataPagAssessoria, setDataPagAssessoria] = useState('');
 
+  // Campos Taxa Federal (Só Financeiro edita)
+  const [valorTaxaFederal, setValorTaxaFederal] = useState('');
+  const [statusTaxaFederal, setStatusTaxaFederal] = useState('Em Aberto');
+  const [formaPagTaxaFederal, setFormaPagTaxaFederal] = useState('');
+  const [dataPagTaxaFederal, setDataPagTaxaFederal] = useState('');
+
+  // Porcentagens e Lideranças (Só Financeiro)
   const [perVendaDireta, setPerVendaDireta] = useState('');
-  const [perGerencia, setPerGerencia] = useState('');
-  const [gerenteSelecionado, setGerenteSelecionado] = useState('');
-  const [perFilial, setPerFilial] = useState('');
-  const [encarregadoSelecionado, setEncarregadoSelecionado] = useState('');
+  const [perRepresentante, setPerRepresentante] = useState('');
+  const [representanteSelecionado, setRepresentanteSelecionado] = useState('');
+  const [perEncarregada, setPerEncarregada] = useState('');
+  const [encarregadaSelecionada, setEncarregadaSelecionada] = useState('');
 
+  // Listas e Estados do Sistema
+  const [vendedoresLista, setVendedoresLista] = useState([]);
   const [contratosLista, setContratosLista] = useState([]);
   const [editandoId, setEditandoId] = useState(null);
-
   const [busca, setBusca] = useState('');
   const [totalPago, setTotalPago] = useState(0);
   const [totalAberto, setTotalAberto] = useState(0);
 
   const emailLogado = auth.currentUser ? auth.currentUser.email : '';
-  const isFinanceiro = emailLogado === 'financeiro@provincia.com'; // Mude para o e-mail real depois!
+  const isFinanceiro = emailLogado === 'financeiro@provincia.com'; 
 
   useEffect(() => {
     const qContratos = query(collection(db, 'lancamentos'), orderBy('dataLancamento', 'desc'));
@@ -53,11 +65,12 @@ function Painel() {
       querySnapshot.forEach((doc) => {
         const data = { id: doc.id, ...doc.data() };
         lista.push(data);
-        if (data.status === 'Pago') {
-          pago += Number(data.valorAssessoria || 0);
-        } else {
-          aberto += Number(data.valorAssessoria || 0);
-        }
+        
+        if (data.statusAssessoria === 'Pago') pago += Number(data.valorAssessoria || 0);
+        else aberto += Number(data.valorAssessoria || 0);
+
+        if (data.statusTaxaFederal === 'Pago') pago += Number(data.valorTaxaFederal || 0);
+        else aberto += Number(data.valorTaxaFederal || 0);
       });
       setContratosLista(lista);
       setTotalPago(pago);
@@ -79,17 +92,18 @@ function Painel() {
 
   const listaFiltrada = contratosLista.filter((c) =>
     c.marca?.toLowerCase().includes(busca.toLowerCase()) ||
-    c.vendedor?.toLowerCase().includes(busca.toLowerCase())
+    c.vendedor?.toLowerCase().includes(busca.toLowerCase()) ||
+    c.observacao?.toLowerCase().includes(busca.toLowerCase())
   );
 
   const handleAdicionarVendedor = async () => {
-    const nome = window.prompt('Digite o NOME do novo vendedor/gerente:');
+    const nome = window.prompt('Digite o NOME do novo colaborador:');
     if (nome && nome.trim() !== '') {
       try {
         await addDoc(collection(db, 'vendedores'), { nome: nome.toUpperCase().trim() });
-        toast.success('Pessoa adicionada com sucesso! 👥'); // Trocado
+        toast.success('Pessoa adicionada com sucesso! 👥'); 
       } catch (error) {
-        toast.error('Erro ao adicionar.'); // Trocado
+        toast.error('Erro ao adicionar.'); 
       }
     }
   };
@@ -103,30 +117,41 @@ function Painel() {
         marca: marca,
         contrato: contrato,
         os: os,
-        valorAssessoria: tratarNumero(valor),
-        status: isFinanceiro ? status : 'Em Aberto',
-        perVendaDireta: tratarNumero(perVendaDireta),
-        perGerencia: tratarNumero(perGerencia),
-        gerente: gerenteSelecionado,
-        perFilial: tratarNumero(perFilial),
-        encarregado: encarregadoSelecionado,
-        vendedor: vendedorSelecionado
+        vendedor: vendedorSelecionado,
+        telefone: telefone, // Salvando o telefone no Firebase
+        observacao: observacao, 
+        
+        valorAssessoria: tratarNumero(valorAssessoria),
+        statusAssessoria: isFinanceiro ? statusAssessoria : 'Em Aberto',
+        formaPagAssessoria: isFinanceiro ? formaPagAssessoria : '',
+        dataPagAssessoria: isFinanceiro ? dataPagAssessoria : '',
+
+        valorTaxaFederal: isFinanceiro ? tratarNumero(valorTaxaFederal) : 0,
+        statusTaxaFederal: isFinanceiro ? statusTaxaFederal : 'Em Aberto',
+        formaPagTaxaFederal: isFinanceiro ? formaPagTaxaFederal : '',
+        dataPagTaxaFederal: isFinanceiro ? dataPagTaxaFederal : '',
+
+        perVendaDireta: isFinanceiro ? tratarNumero(perVendaDireta) : 0,
+        perRepresentante: isFinanceiro ? tratarNumero(perRepresentante) : 0,
+        representante: isFinanceiro ? representanteSelecionado : '',
+        perEncarregada: isFinanceiro ? tratarNumero(perEncarregada) : 0,
+        encarregada: isFinanceiro ? encarregadaSelecionada : ''
       };
 
       if (editandoId) {
         await updateDoc(doc(db, 'lancamentos', editandoId), dadosDoContrato);
-        toast.success('Contrato atualizado com sucesso! ✏️'); // Trocado
+        toast.success('Contrato atualizado com sucesso! ✏️'); 
       } else {
         await addDoc(collection(db, 'lancamentos'), {
           ...dadosDoContrato,
           dataLancamento: new Date() 
         });
-        toast.success('Contrato salvo com sucesso! ✅'); // Trocado
+        toast.success('Contrato salvo com sucesso! ✅'); 
       }
       limparCampos();
     } catch (error) {
       console.error('Erro ao salvar: ', error);
-      toast.error('Erro ao salvar o contrato.'); // Trocado
+      toast.error('Erro ao salvar o contrato.'); 
     }
   };
 
@@ -134,30 +159,42 @@ function Painel() {
     setMarca(item.marca || '');
     setContrato(item.contrato || '');
     setOs(item.os || '');
-    setValor(item.valorAssessoria || '');
-    setStatus(item.status || 'Em Aberto');
-    setPerVendaDireta(item.perVendaDireta || '');
-    setPerGerencia(item.perGerencia || '');
-    setGerenteSelecionado(item.gerente || '');
-    setPerFilial(item.perFilial || '');
-    setEncarregadoSelecionado(item.encarregado || '');
     setVendedorSelecionado(item.vendedor || '');
+    setTelefone(item.telefone || ''); // Resgatando o telefone
+    setObservacao(item.observacao || ''); 
+    
+    setValorAssessoria(item.valorAssessoria || '');
+    setStatusAssessoria(item.statusAssessoria || 'Em Aberto');
+    setFormaPagAssessoria(item.formaPagAssessoria || '');
+    setDataPagAssessoria(item.dataPagAssessoria || '');
+
+    setValorTaxaFederal(item.valorTaxaFederal || '');
+    setStatusTaxaFederal(item.statusTaxaFederal || 'Em Aberto');
+    setFormaPagTaxaFederal(item.formaPagTaxaFederal || '');
+    setDataPagTaxaFederal(item.dataPagTaxaFederal || '');
+
+    setPerVendaDireta(item.perVendaDireta || '');
+    setPerRepresentante(item.perRepresentante || '');
+    setRepresentanteSelecionado(item.representante || '');
+    setPerEncarregada(item.perEncarregada || '');
+    setEncarregadaSelecionada(item.encarregada || '');
+
     setEditandoId(item.id);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleExcluir = async (id, statusAtual) => {
-    if (!isFinanceiro && statusAtual === 'Pago') {
-      toast.error('Você não pode excluir um contrato pago.'); // Trocado
+  const handleExcluir = async (id, statAssessoria, statTaxa) => {
+    if (!isFinanceiro && (statAssessoria === 'Pago' || statTaxa === 'Pago')) {
+      toast.error('Não podes excluir um contrato com pagamentos realizados.'); 
       return;
     }
-    const confirmacao = window.confirm('Tem certeza que deseja excluir este contrato?');
+    const confirmacao = window.confirm('Desejas excluir este contrato?');
     if (confirmacao) {
       try {
         await deleteDoc(doc(db, 'lancamentos', id));
-        toast.success('Contrato excluído com sucesso! 🗑️'); // Trocado
+        toast.success('Contrato excluído com sucesso! 🗑️'); 
       } catch (error) {
-        toast.error('Erro ao excluir o contrato.'); // Trocado
+        toast.error('Erro ao excluir o contrato.'); 
       }
     }
   };
@@ -166,34 +203,44 @@ function Painel() {
     setMarca('');
     setContrato('');
     setOs('');
-    setValor('');
-    setStatus('Em Aberto');
-    setPerVendaDireta('');
-    setPerGerencia('');
-    setGerenteSelecionado('');
-    setPerFilial('');
-    setEncarregadoSelecionado('');
     setVendedorSelecionado('');
+    setTelefone('');
+    setObservacao('');
+    
+    setValorAssessoria('');
+    setStatusAssessoria('Em Aberto');
+    setFormaPagAssessoria('');
+    setDataPagAssessoria('');
+
+    setValorTaxaFederal('');
+    setStatusTaxaFederal('Em Aberto');
+    setFormaPagTaxaFederal('');
+    setDataPagTaxaFederal('');
+
+    setPerVendaDireta('');
+    setPerRepresentante('');
+    setRepresentanteSelecionado('');
+    setPerEncarregada('');
+    setEncarregadaSelecionada('');
     setEditandoId(null);
   };
 
   return (
     <div style={{ padding: '40px 20px', backgroundColor: '#f0f2f5', minHeight: '100vh' }}>
-      {/* Componente Invisível que renderiza as notificações na tela */}
       <Toaster position="top-right" reverseOrder={false} />
 
-      <div style={{ display: 'flex', gap: '20px', maxWidth: '900px', margin: '0 auto 20px auto', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '20px', maxWidth: '1000px', margin: '0 auto 20px auto', flexWrap: 'wrap' }}>
         <div style={cardStyle}>
-          <h3 style={{ margin: 0, color: '#28a745' }}>💰 Pago</h3>
+          <h3 style={{ margin: 0, color: '#28a745' }}>💰 Total Pago</h3>
           <p style={{ fontSize: '24px', fontWeight: 'bold', margin: '10px 0 0 0' }}>R$ {totalPago.toFixed(2)}</p>
         </div>
         <div style={cardStyle}>
-          <h3 style={{ margin: 0, color: '#856404' }}>⏳ Em Aberto</h3>
+          <h3 style={{ margin: 0, color: '#856404' }}>⏳ Total Em Aberto</h3>
           <p style={{ fontSize: '24px', fontWeight: 'bold', margin: '10px 0 0 0' }}>R$ {totalAberto.toFixed(2)}</p>
         </div>
       </div>
 
-      <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', maxWidth: '900px', margin: '0 auto' }}>
+      <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', maxWidth: '1000px', margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
           <h2 style={{ color: '#333', margin: 0 }}>
             {editandoId ? 'Editando Contrato' : 'Lançar Contrato'}
@@ -202,62 +249,119 @@ function Painel() {
 
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             {isFinanceiro && (
-              <button type="button" onClick={handleAdicionarVendedor} style={btnAmarelo}>👥 Vendedor</button>
+              <button type="button" onClick={handleAdicionarVendedor} style={btnAmarelo}>👥 Cadastros</button>
             )}
             {isFinanceiro && (
-              <Link to="/relatorio" style={btnAzul}>📊 Relatórios</Link>
+              <Link to="/geral" style={btnLaranja}>📋 Planilha Geral</Link>
+            )}
+            {isFinanceiro && (
+              <Link to="/relatorio" style={btnAzul}>📊 Comissões</Link>
             )}
             <button type="button" onClick={handleSair} style={btnVermelho}>Sair</button>
           </div>
         </div>
 
-        <form onSubmit={handleSalvar} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          <select value={vendedorSelecionado} onChange={(e) => setVendedorSelecionado(e.target.value)} required style={inputStyle}>
-            <option value="" disabled>Selecione o Vendedor Principal...</option>
-            {vendedoresLista.map((v) => <option key={v.id} value={v.nome}>{v.nome}</option>)}
-          </select>
-
-          <input type="text" placeholder="Nome da Marca" value={marca} onChange={(e) => setMarca(e.target.value)} required style={inputStyle} />
-
-          <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
-            <input type="text" placeholder="Nº do Contrato" value={contrato} onChange={(e) => setContrato(e.target.value)} style={{ ...inputStyle, flex: '1 1 200px' }} />
-            <input type="text" placeholder="Nº da OS" value={os} onChange={(e) => setOs(e.target.value)} style={{ ...inputStyle, flex: '1 1 200px' }} />
+        <form onSubmit={handleSalvar} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          
+          {/* DADOS BÁSICOS - INCLUINDO TELEFONE */}
+          <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', backgroundColor: '#f8f9fa', padding: '15px', border: '1px solid #ddd', borderRadius: '8px' }}>
+            <select value={vendedorSelecionado} onChange={(e) => setVendedorSelecionado(e.target.value)} required style={{...inputStyle, flex: '1 1 200px'}}>
+              <option value="" disabled>Selecione o Vendedor Principal...</option>
+              {vendedoresLista.map((v) => <option key={v.id} value={v.nome}>{v.nome}</option>)}
+            </select>
+            <input type="text" placeholder="Nome da Marca" value={marca} onChange={(e) => setMarca(e.target.value)} required style={{...inputStyle, flex: '1 1 200px'}} />
+            <input type="text" placeholder="Telefone do Cliente" value={telefone} onChange={(e) => setTelefone(e.target.value)} style={{ ...inputStyle, flex: '1 1 150px' }} />
+            <input type="text" placeholder="Nº do Contrato" value={contrato} onChange={(e) => setContrato(e.target.value)} style={{ ...inputStyle, flex: '1 1 120px' }} />
+            <input type="text" placeholder="Nº da OS" value={os} onChange={(e) => setOs(e.target.value)} style={{ ...inputStyle, flex: '1 1 120px' }} />
+            <input type="number" step="any" placeholder="Valor da Assessoria (R$)" value={valorAssessoria} onChange={(e) => setValorAssessoria(e.target.value)} required style={{...inputStyle, flex: '1 1 150px'}} />
           </div>
 
-          <input type="number" step="any" placeholder="Valor da Assessoria" value={valor} onChange={(e) => setValor(e.target.value)} required style={inputStyle} />
-
+          {/* ÁREA DO FINANCEIRO */}
           {isFinanceiro && (
-            <select value={status} onChange={(e) => setStatus(e.target.value)} style={inputStyle}>
-              <option value="Em Aberto">Em Aberto</option>
-              <option value="Pago">Pago</option>
-              <option value="Aberto - Pagou só a taxa">Aberto - Pagou só a taxa</option>
-            </select>
+            <>
+              <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 300px', backgroundColor: '#e9ecef', padding: '15px', borderRadius: '8px', border: '1px solid #ced4da' }}>
+                  <h4 style={{ margin: '0 0 10px 0', color: '#495057' }}>📌 Pagamento Assessoria</h4>
+                  <label style={labelStyle}>Status</label>
+                  <select value={statusAssessoria} onChange={(e) => setStatusAssessoria(e.target.value)} style={{...inputStyle, width: '100%', marginBottom: '10px'}}>
+                    <option value="Em Aberto">Em Aberto</option>
+                    <option value="Pago">Pago</option>
+                  </select>
+                  {statusAssessoria === 'Pago' && (
+                    <>
+                      <label style={labelStyle}>Forma de Pagamento</label>
+                      <select value={formaPagAssessoria} onChange={(e) => setFormaPagAssessoria(e.target.value)} style={{...inputStyle, width: '100%', marginBottom: '10px'}}>
+                        <option value="">Selecione...</option>
+                        <option value="Pix">Pix</option>
+                        <option value="Boleto">Boleto</option>
+                        <option value="Cartão de Crédito">Cartão de Crédito</option>
+                        <option value="Cartão de Débito">Cartão de Débito</option>
+                        <option value="Cartão Recorrente">Cartão Recorrente</option>
+                        <option value="Transferência">Transferência</option>
+                      </select>
+                      <label style={labelStyle}>Data do Pagamento</label>
+                      <input type="date" value={dataPagAssessoria} onChange={(e) => setDataPagAssessoria(e.target.value)} style={{...inputStyle, width: '100%'}} />
+                    </>
+                  )}
+                </div>
+
+                <div style={{ flex: '1 1 300px', backgroundColor: '#e9ecef', padding: '15px', borderRadius: '8px', border: '1px solid #ced4da' }}>
+                  <h4 style={{ margin: '0 0 10px 0', color: '#495057' }}>🏛️ Pagamento Taxa Federal</h4>
+                  <label style={labelStyle}>Valor da Taxa (R$)</label>
+                  <input type="number" step="any" placeholder="Ex: 150.00" value={valorTaxaFederal} onChange={(e) => setValorTaxaFederal(e.target.value)} style={{...inputStyle, width: '100%', marginBottom: '10px'}} />
+                  <label style={labelStyle}>Status</label>
+                  <select value={statusTaxaFederal} onChange={(e) => setStatusTaxaFederal(e.target.value)} style={{...inputStyle, width: '100%', marginBottom: '10px'}}>
+                    <option value="Em Aberto">Em Aberto</option>
+                    <option value="Pago">Pago</option>
+                  </select>
+                  {statusTaxaFederal === 'Pago' && (
+                    <>
+                      <label style={labelStyle}>Forma de Pagamento</label>
+                      <select value={formaPagTaxaFederal} onChange={(e) => setFormaPagTaxaFederal(e.target.value)} style={{...inputStyle, width: '100%', marginBottom: '10px'}}>
+                        <option value="">Selecione...</option>
+                        <option value="Pix">Pix</option>
+                        <option value="Boleto">Boleto</option>
+                        <option value="Cartão de Crédito">Cartão de Crédito</option>
+                        <option value="Cartão de Débito">Cartão de Débito</option>
+                        <option value="Cartão Recorrente">Cartão Recorrente</option>
+                        <option value="Transferência">Transferência</option>
+                      </select>
+                      <label style={labelStyle}>Data do Pagamento</label>
+                      <input type="date" value={dataPagTaxaFederal} onChange={(e) => setDataPagTaxaFederal(e.target.value)} style={{...inputStyle, width: '100%'}} />
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '15px', backgroundColor: '#e2e3e5', padding: '15px', borderRadius: '8px', border: '1px solid #d6d8db', flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 200px' }}>
+                  <label style={labelStyle}>% Venda Direta</label>
+                  <input type="number" step="any" placeholder="Ex: 7" value={perVendaDireta} onChange={(e) => setPerVendaDireta(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: '5px' }} />
+                </div>
+                <div style={{ flex: '1 1 200px' }}>
+                  <label style={labelStyle}>% Representante</label>
+                  <input type="number" step="any" placeholder="Ex: 3" value={perRepresentante} onChange={(e) => setPerRepresentante(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: '5px' }} />
+                  <select value={representanteSelecionado} onChange={(e) => setRepresentanteSelecionado(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: '5px' }}>
+                    <option value="">Quem é o Representante?</option>
+                    {vendedoresLista.map((v) => <option key={v.id} value={v.nome}>{v.nome}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: '1 1 200px' }}>
+                  <label style={labelStyle}>% Encarregada</label>
+                  <input type="number" step="any" placeholder="Ex: 2" value={perEncarregada} onChange={(e) => setPerEncarregada(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: '5px' }} />
+                  <select value={encarregadaSelecionada} onChange={(e) => setEncarregadaSelecionada(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: '5px' }}>
+                    <option value="">Quem é a Encarregada?</option>
+                    {vendedoresLista.map((v) => <option key={v.id} value={v.nome}>{v.nome}</option>)}
+                  </select>
+                </div>
+              </div>
+            </>
           )}
 
-          {isFinanceiro && (
-            <div style={{ display: 'flex', gap: '15px', backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '4px', border: '1px solid #ddd', flexWrap: 'wrap' }}>
-              <div style={{ flex: '1 1 200px' }}>
-                <label style={labelStyle}>% Venda Direta</label>
-                <input type="number" step="any" placeholder="Ex: 7" value={perVendaDireta} onChange={(e) => setPerVendaDireta(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: '5px' }} />
-              </div>
-              <div style={{ flex: '1 1 200px' }}>
-                <label style={labelStyle}>% Gerência</label>
-                <input type="number" step="any" placeholder="Ex: 3" value={perGerencia} onChange={(e) => setPerGerencia(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: '5px' }} />
-                <select value={gerenteSelecionado} onChange={(e) => setGerenteSelecionado(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: '5px' }}>
-                  <option value="">Quem é o Gerente?</option>
-                  {vendedoresLista.map((v) => <option key={v.id} value={v.nome}>{v.nome}</option>)}
-                </select>
-              </div>
-              <div style={{ flex: '1 1 200px' }}>
-                <label style={labelStyle}>% Filial</label>
-                <input type="number" step="any" placeholder="Ex: 2" value={perFilial} onChange={(e) => setPerFilial(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: '5px' }} />
-                <select value={encarregadoSelecionado} onChange={(e) => setEncarregadoSelecionado(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: '5px' }}>
-                  <option value="">Quem é o Encarregado?</option>
-                  {vendedoresLista.map((v) => <option key={v.id} value={v.nome}>{v.nome}</option>)}
-                </select>
-              </div>
-            </div>
-          )}
+          <div style={{ backgroundColor: '#f8f9fa', padding: '15px', border: '1px solid #ddd', borderRadius: '8px' }}>
+            <label style={labelStyle}>Observações Internas (Ex: Vai pagar tal dia, observações de cobrança)</label>
+            <input type="text" placeholder="Digite avisos ou prazos acordados..." value={observacao} onChange={(e) => setObservacao(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: '5px' }} />
+          </div>
 
           <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
             <button type="submit" style={{ flex: 1, padding: '12px', backgroundColor: editandoId ? '#007bff' : '#28a745', color: 'white', border: 'none', borderRadius: '4px', fontSize: '16px', cursor: 'pointer', fontWeight: 'bold' }}>
@@ -270,24 +374,22 @@ function Painel() {
         </form>
       </div>
 
-      <div style={{ maxWidth: '900px', margin: '20px auto' }}>
-        <input type="text" placeholder="🔍 Pesquisar por marca ou vendedor..." value={busca} onChange={(e) => setBusca(e.target.value)} style={{ width: '100%', padding: '15px', borderRadius: '8px', border: '1px solid #ccc', fontSize: '16px', boxSizing: 'border-box' }} />
+      <div style={{ maxWidth: '1000px', margin: '20px auto' }}>
+        <input type="text" placeholder="🔍 Pesquisar por marca, vendedor ou observações..." value={busca} onChange={(e) => setBusca(e.target.value)} style={{ width: '100%', padding: '15px', borderRadius: '8px', border: '1px solid #ccc', fontSize: '16px', boxSizing: 'border-box' }} />
       </div>
 
-      <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', maxWidth: '900px', margin: '30px auto' }}>
-        <h2 style={{ marginBottom: '20px', color: '#333' }}>Contratos Lançados</h2>
+      <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', maxWidth: '1000px', margin: '30px auto' }}>
+        <h2 style={{ marginBottom: '20px', color: '#333' }}>Contratos Lançados Recentemente</h2>
         
-        {/* NOVO: Div de overflow para o celular não espremer a tabela */}
         <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
             <thead>
               <tr style={{ backgroundColor: '#f8f9fa', borderBottom: '2px solid #ddd' }}>
                 <th style={thStyle}>Vendedor</th>
-                <th style={thStyle}>Marca</th>
-                <th style={thStyle}>Contrato</th>
-                <th style={thStyle}>OS</th>
-                <th style={thStyle}>Valor</th>
-                <th style={thStyle}>Status</th>
+                <th style={thStyle}>Marca / Obs</th>
+                <th style={thStyle}>Contato / Doc</th>
+                <th style={thStyle}>Assessoria</th>
+                <th style={thStyle}>Taxa Federal</th>
                 <th style={thStyle}>Ações</th>
               </tr>
             </thead>
@@ -295,22 +397,38 @@ function Painel() {
               {listaFiltrada.map((item) => (
                 <tr key={item.id} style={{ borderBottom: '1px solid #eee' }}>
                   <td style={{ ...tdStyle, fontWeight: 'bold', color: '#007bff' }}>{item.vendedor}</td>
-                  <td style={tdStyle}>{item.marca}</td>
-                  <td style={{ ...tdStyle, fontWeight: 'bold' }}>{item.contrato || '-'}</td>
-                  <td style={tdStyle}>{item.os || '-'}</td>
-                  <td style={tdStyle}>R$ {Number(item.valorAssessoria || 0).toFixed(2)}</td>
                   <td style={tdStyle}>
-                    <span style={{ backgroundColor: item.status === 'Pago' ? '#d4edda' : '#fff3cd', color: item.status === 'Pago' ? '#155724' : '#856404', padding: '4px 8px', borderRadius: '4px', fontSize: '14px', whiteSpace: 'nowrap' }}>
-                      {item.status}
+                    <strong>{item.marca}</strong>
+                    {item.observacao && (
+                      <div style={{ fontSize: '12px', color: '#dc3545', marginTop: '4px', fontStyle: 'italic' }}>
+                        💬 {item.observacao}
+                      </div>
+                    )}
+                  </td>
+                  <td style={tdStyle}>
+                    {item.telefone && <span style={{fontSize: '12px', color: '#475569'}}>📞 {item.telefone}<br/></span>}
+                    <strong>CT:</strong> {item.contrato || '-'}<br/>
+                    <strong>OS:</strong> {item.os || '-'}
+                  </td>
+                  <td style={tdStyle}>
+                    <div style={{ marginBottom: '5px' }}>R$ {Number(item.valorAssessoria || 0).toFixed(2)}</div>
+                    <span style={{ backgroundColor: item.statusAssessoria === 'Pago' ? '#d4edda' : '#fff3cd', color: item.statusAssessoria === 'Pago' ? '#155724' : '#856404', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                      {item.statusAssessoria || 'Em Aberto'} {item.formaPagAssessoria ? `(${item.formaPagAssessoria})` : ''}
                     </span>
                   </td>
                   <td style={tdStyle}>
-                    {(!isFinanceiro && item.status === 'Pago') ? (
+                    <div style={{ marginBottom: '5px' }}>R$ {Number(item.valorTaxaFederal || 0).toFixed(2)}</div>
+                    <span style={{ backgroundColor: item.statusTaxaFederal === 'Pago' ? '#d4edda' : '#fff3cd', color: item.statusTaxaFederal === 'Pago' ? '#155724' : '#856404', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                      {item.statusTaxaFederal || 'Em Aberto'} {item.formaPagTaxaFederal ? `(${item.formaPagTaxaFederal})` : ''}
+                    </span>
+                  </td>
+                  <td style={tdStyle}>
+                    {(!isFinanceiro && (item.statusAssessoria === 'Pago' || item.statusTaxaFederal === 'Pago')) ? (
                       <span style={{ fontSize: '12px', color: '#888' }}>🔒 Bloqueado</span>
                     ) : (
-                      <div style={{ display: 'flex', gap: '5px', justifyContent: 'center' }}>
+                      <div style={{ display: 'flex', gap: '5px', justifyContent: 'center', flexDirection: 'column' }}>
                         <button onClick={() => puxarParaEdicao(item)} style={{ padding: '6px 10px', backgroundColor: '#f8f9fa', border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer' }}>✏️ Editar</button>
-                        <button onClick={() => handleExcluir(item.id, item.status)} style={{ padding: '6px 10px', backgroundColor: '#ffeeba', color: '#856404', border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer' }}>🗑️ Excluir</button>
+                        <button onClick={() => handleExcluir(item.id, item.statusAssessoria, item.statusTaxaFederal)} style={{ padding: '6px 10px', backgroundColor: '#ffeeba', color: '#856404', border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer' }}>🗑️ Excluir</button>
                       </div>
                     )}
                   </td>
@@ -319,19 +437,19 @@ function Painel() {
             </tbody>
           </table>
         </div>
-        {listaFiltrada.length === 0 && <p style={{textAlign: 'center', marginTop: '20px', color: '#888'}}>Nenhum contrato encontrado.</p>}
       </div>
     </div>
   );
 }
 
 const inputStyle = { padding: '12px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '16px', boxSizing: 'border-box' };
-const labelStyle = { fontSize: '14px', color: '#555', fontWeight: 'bold' };
+const labelStyle = { fontSize: '14px', color: '#555', fontWeight: 'bold', display: 'block', marginTop: '5px' };
 const thStyle = { padding: '12px', textAlign: 'left', color: '#555', whiteSpace: 'nowrap' };
 const tdStyle = { padding: '12px', color: '#333' };
 const cardStyle = { flex: '1 1 250px', backgroundColor: 'white', padding: '20px', borderRadius: '8px', textAlign: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' };
 
 const btnAmarelo = { padding: '10px 15px', backgroundColor: '#ffc107', color: '#333', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' };
+const btnLaranja = { padding: '10px 15px', backgroundColor: '#fd7e14', color: 'white', textDecoration: 'none', borderRadius: '4px', fontWeight: 'bold', display: 'flex', alignItems: 'center' };
 const btnAzul = { padding: '10px 15px', backgroundColor: '#007bff', color: 'white', textDecoration: 'none', borderRadius: '4px', fontWeight: 'bold', display: 'flex', alignItems: 'center' };
 const btnVermelho = { padding: '10px 15px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' };
 
