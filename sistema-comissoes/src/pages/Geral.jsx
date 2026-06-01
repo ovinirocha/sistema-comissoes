@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Link } from 'react-router-dom';
-import * as XLSX from 'xlsx';
+// IMPORTAÇÕES NOVAS DO EXCEL PROFISSIONAL
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 
 function Geral() {
   const [contratosMes, setContratosMes] = useState([]);
@@ -46,6 +48,18 @@ function Geral() {
     c.contrato?.toLowerCase().includes(busca.toLowerCase())
   );
 
+  const listaOrdenada = [...listaFiltrada].sort((a, b) => {
+    const dataA = a.dataFechamento || '9999-12-31'; 
+    const dataB = b.dataFechamento || '9999-12-31';
+
+    if (dataA < dataB) return -1;
+    if (dataA > dataB) return 1;
+
+    const vendA = a.vendedor || '';
+    const vendB = b.vendedor || '';
+    return vendA.localeCompare(vendB);
+  });
+
   const formatarDataBR = (dataString) => {
     if (!dataString) return '';
     const partes = dataString.split('-');
@@ -80,18 +94,43 @@ function Geral() {
     return semanas;
   };
 
-  const contratosAgrupados = agruparPorSemanas(listaFiltrada);
+  const contratosAgrupados = agruparPorSemanas(listaOrdenada);
 
-  const exportarExcelGeral = () => {
-    const workbook = XLSX.utils.book_new();
+  // A NOVA FUNÇÃO DE EXCEL PROFISSIONAL DA PLANILHA GERAL
+  const exportarExcelGeral = async () => {
+    const workbook = new ExcelJS.Workbook();
+    let temDados = false;
 
     Object.keys(contratosAgrupados).forEach((nomeSemana) => {
       const contratosDaSemana = contratosAgrupados[nomeSemana];
 
       if (contratosDaSemana.length > 0) {
-        const linhasGeral = contratosDaSemana.map((c) => {
-          
-          // Lógica de texto pro Excel (Taxa)
+        temDados = true;
+        // Cria a aba para a semana (removendo caracteres que o Excel não gosta no nome da aba)
+        const sheetName = nomeSemana.replace(/[/\\?*:"<>|]/g, '-');
+        const sheet = workbook.addWorksheet(sheetName);
+
+        // 1. Configurar Colunas
+        sheet.columns = [
+          { header: 'COLABORADOR', key: 'colaborador', width: 25 },
+          { header: 'MARCAS', key: 'marca', width: 30 },
+          { header: 'TELEFONE', key: 'telefone', width: 20 },
+          { header: 'FECHADO EM', key: 'fechado', width: 15 },
+          { header: 'TAXA / VALOR / DATA', key: 'taxa', width: 45 },
+          { header: 'Nº CONTRATO', key: 'contrato', width: 15 },
+          { header: 'Nº OS', key: 'os', width: 15 },
+          { header: 'OBSERVAÇÃO', key: 'obs', width: 45 },
+          { header: 'VALOR DE CONTRATO', key: 'valor', width: 45 }
+        ];
+
+        // 2. Pintar o Cabeçalho (Azul Escuro)
+        const headerRow = sheet.getRow(1);
+        headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+        headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
+        // 3. Preencher os Dados
+        contratosDaSemana.forEach((c) => {
           const statusTaxa = c.statusTaxaFederal || 'Em Aberto';
           let infoTaxa = statusTaxa;
           if (Number(c.valorTaxaFederal) > 0) {
@@ -103,7 +142,6 @@ function Geral() {
             }
           }
 
-          // Lógica de texto pro Excel (Assessoria)
           const statusAss = c.statusAssessoria || 'Em Aberto';
           let infoAssessoria = `R$ ${Number(c.valorAssessoria || 0).toFixed(2)} - ${statusAss}`;
           if (statusAss === 'Pago' && c.dataPagAssessoria) {
@@ -112,30 +150,42 @@ function Geral() {
              infoAssessoria += ` (${c.formaPagAssessoria || 'S/N'} - Vence: ${formatarDataBR(c.dataVencimentoAssessoria)})`;
           }
 
-          return {
-            'COLABORADOR': c.vendedor || '-',
-            'MARCAS': c.marca || '-',
-            'TELEFONE': c.telefone || '-',
-            'FECHADO EM': formatarDataBR(c.dataFechamento) || 'Sem Data',
-            'TAXA / VALOR / DATA': infoTaxa,
-            'N* CONTRATO': c.contrato || '-',
-            'N* OS': c.os || '-',
-            'OBSERVAÇÃO': c.observacao || '-',
-            'VALOR DE CONTRATO': infoAssessoria
-          };
-        });
+          const row = sheet.addRow({
+            colaborador: c.vendedor || '-',
+            marca: c.marca || '-',
+            telefone: c.telefone || '-',
+            fechado: formatarDataBR(c.dataFechamento) || 'Sem Data',
+            taxa: infoTaxa,
+            contrato: c.contrato || '-',
+            os: c.os || '-',
+            obs: c.observacao || '-',
+            valor: infoAssessoria
+          });
 
-        const worksheet = XLSX.utils.json_to_sheet(linhasGeral);
-        XLSX.utils.book_append_sheet(workbook, worksheet, nomeSemana);
+          // 4. Colorir as células baseado no Status
+          if (infoTaxa.includes('Em Aberto')) {
+            row.getCell('taxa').font = { color: { argb: 'FFDC3545' }, bold: true }; // Vermelho
+          } else if (infoTaxa.includes('Pago')) {
+            row.getCell('taxa').font = { color: { argb: 'FF28A745' }, bold: true }; // Verde
+          }
+
+          if (infoAssessoria.includes('Em Aberto')) {
+            row.getCell('valor').font = { color: { argb: 'FFDC3545' }, bold: true }; // Vermelho
+          } else if (infoAssessoria.includes('Pago')) {
+            row.getCell('valor').font = { color: { argb: 'FF28A745' }, bold: true }; // Verde
+          }
+        });
       }
     });
 
-    if (workbook.SheetNames.length === 0) {
+    if (!temDados) {
       alert("Nenhum contrato encontrado nesta competência para gerar a planilha!");
       return;
     }
 
-    XLSX.writeFile(workbook, `Fechamento_Geral_Mes_${mesFiltro}.xlsx`);
+    // Gerar e baixar o arquivo
+    const buffer = await workbook.xlsx.writeBuffer();
+    saveAs(new Blob([buffer]), `Fechamento_Geral_Mes_${mesFiltro}.xlsx`);
   };
 
   const imprimirPDFGeral = () => {
@@ -175,7 +225,7 @@ function Geral() {
           if (contratosDaSemana.length === 0) return null;
 
           return (
-            <div key={nomeSemana} style={{ marginBottom: '40px', pageBreakInside: 'avoid' }}>
+            <div key={nomeSemana} style={{ marginBottom: '40px' }} className="print-semana-box">
               <h3 className="titulo-semana" style={{ backgroundColor: '#0284c7', color: 'white', padding: '10px 15px', borderRadius: '6px 6px 0 0', margin: 0, fontSize: '16px' }}>
                 {nomeSemana}
               </h3>
@@ -238,13 +288,20 @@ function Geral() {
       <style>
         {`
           @media print {
-            body { background-color: white !important; margin: 0; padding: 0; }
+            body { background-color: white !important; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .no-print { display: none !important; }
             .container-geral { box-shadow: none !important; padding: 0 !important; max-width: 100% !important; margin: 0 !important; }
-            .tabela-print { border-collapse: collapse !important; width: 100% !important; margin-bottom: 20px !important; }
-            .titulo-semana { background-color: #0284c7 !important; color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; border: 1px solid #0284c7; }
-            .tabela-print th { background-color: #1e293b !important; color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: 8px !important; }
+            
+            .print-semana-box { page-break-inside: auto; break-inside: auto; }
+            .tabela-print { width: 100% !important; min-width: 100% !important; table-layout: auto !important; page-break-inside: auto; margin-bottom: 20px !important; }
+            .tabela-print thead { display: table-header-group; }
+            .tabela-print tr { page-break-inside: avoid; break-inside: avoid; }
+            
+            .tabela-print th { background-color: #1e293b !important; color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; padding: 8px !important; font-size: 11px !important; }
             .tabela-print td { padding: 6px !important; font-size: 11px !important; border: 1px solid #ddd !important; }
+            
+            .titulo-semana { background-color: #0284c7 !important; color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; border: 1px solid #0284c7; page-break-after: avoid !important; break-after: avoid !important; margin-bottom: 0 !important; }
+            
             .badge-status { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           }
         `}

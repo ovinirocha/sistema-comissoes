@@ -17,7 +17,6 @@ function Painel() {
     }
   };
 
-  // Campos Básicos (Vendedor vê)
   const [marca, setMarca] = useState('');
   const [contrato, setContrato] = useState('');
   const [os, setOs] = useState('');
@@ -26,28 +25,25 @@ function Painel() {
   const [observacao, setObservacao] = useState(''); 
   const [dataFechamento, setDataFechamento] = useState(''); 
   
-  // Campos Assessoria (A NOVA LÓGICA DE UX AQUI)
   const [valorAssessoria, setValorAssessoria] = useState('');
   const [formaPagAssessoria, setFormaPagAssessoria] = useState('');
   const [statusAssessoria, setStatusAssessoria] = useState('Em Aberto');
-  const [dataVencimentoAssessoria, setDataVencimentoAssessoria] = useState(''); // NOVO: Vencimento
+  const [dataVencimentoAssessoria, setDataVencimentoAssessoria] = useState(''); 
   const [dataPagAssessoria, setDataPagAssessoria] = useState('');
 
-  // Campos Taxa Federal
   const [valorTaxaFederal, setValorTaxaFederal] = useState('');
   const [formaPagTaxaFederal, setFormaPagTaxaFederal] = useState('');
   const [statusTaxaFederal, setStatusTaxaFederal] = useState('Em Aberto');
-  const [dataVencimentoTaxaFederal, setDataVencimentoTaxaFederal] = useState(''); // NOVO: Vencimento
+  const [dataVencimentoTaxaFederal, setDataVencimentoTaxaFederal] = useState(''); 
   const [dataPagTaxaFederal, setDataPagTaxaFederal] = useState('');
 
-  // Porcentagens e Lideranças
   const [perVendaDireta, setPerVendaDireta] = useState('');
+  const [perBonusPagamento, setPerBonusPagamento] = useState(''); // AGORA É PORCENTAGEM
   const [perRepresentante, setPerRepresentante] = useState('');
   const [representanteSelecionado, setRepresentanteSelecionado] = useState('');
   const [perEncarregada, setPerEncarregada] = useState('');
   const [encarregadaSelecionada, setEncarregadaSelecionada] = useState('');
 
-  // Listas e Estados do Sistema
   const [vendedoresLista, setVendedoresLista] = useState([]);
   const [contratosLista, setContratosLista] = useState([]);
   const [editandoId, setEditandoId] = useState(null);
@@ -57,6 +53,17 @@ function Painel() {
 
   const emailLogado = auth.currentUser ? auth.currentUser.email : '';
   const isFinanceiro = emailLogado === 'financeiro@provincia.com'; 
+
+  // MÁGICA PARA MOSTRAR/ESCONDER O CAMPO DE BÔNUS
+  const formasAceitasBonus = ['Cartão de Crédito', 'Cartão de Débito', 'Cartão Recorrente', 'Pix', 'Boleto'];
+  const mostrarCampoBonus = formasAceitasBonus.includes(formaPagAssessoria);
+
+  useEffect(() => {
+    // Se a pessoa mudar a forma de pagamento e não for aceita, zera o bônus
+    if (!mostrarCampoBonus) {
+      setPerBonusPagamento('');
+    }
+  }, [formaPagAssessoria, mostrarCampoBonus]);
 
   useEffect(() => {
     const qContratos = query(collection(db, 'lancamentos'), orderBy('dataLancamento', 'desc'));
@@ -138,6 +145,7 @@ function Painel() {
         dataPagTaxaFederal: isFinanceiro ? dataPagTaxaFederal : '',
 
         perVendaDireta: isFinanceiro ? tratarNumero(perVendaDireta) : 0,
+        perBonusPagamento: isFinanceiro && mostrarCampoBonus ? tratarNumero(perBonusPagamento) : 0, // SALVA A NOVA PORCENTAGEM
         perRepresentante: isFinanceiro ? tratarNumero(perRepresentante) : 0,
         representante: isFinanceiro ? representanteSelecionado : '',
         perEncarregada: isFinanceiro ? tratarNumero(perEncarregada) : 0,
@@ -183,6 +191,7 @@ function Painel() {
     setDataPagTaxaFederal(item.dataPagTaxaFederal || '');
 
     setPerVendaDireta(item.perVendaDireta || '');
+    setPerBonusPagamento(item.perBonusPagamento || ''); // PUXA A EDIÇÃO DA PORCENTAGEM
     setPerRepresentante(item.perRepresentante || '');
     setRepresentanteSelecionado(item.representante || '');
     setPerEncarregada(item.perEncarregada || '');
@@ -230,6 +239,7 @@ function Painel() {
     setDataPagTaxaFederal('');
 
     setPerVendaDireta('');
+    setPerBonusPagamento(''); 
     setPerRepresentante('');
     setRepresentanteSelecionado('');
     setPerEncarregada('');
@@ -268,6 +278,9 @@ function Painel() {
             )}
             {isFinanceiro && (
               <Link to="/relatorio" style={btnAzul}>📊 Comissões</Link>
+            )}
+            {isFinanceiro && (
+              <Link to="/bonus" style={btnBonus}>🟠 Bônus Pagamento</Link>
             )}
             <button type="button" onClick={handleSair} style={btnVermelho}>Sair</button>
           </div>
@@ -312,7 +325,6 @@ function Painel() {
           {isFinanceiro && (
             <>
               <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-                {/* CAIXA DE ASSESSORIA (COM A NOVA UX) */}
                 <div style={{ flex: '1 1 300px', backgroundColor: '#e9ecef', padding: '15px', borderRadius: '8px', border: '1px solid #ced4da' }}>
                   <h4 style={{ margin: '0 0 10px 0', color: '#495057' }}>📌 Pagamento Assessoria</h4>
                   
@@ -348,7 +360,6 @@ function Painel() {
                   )}
                 </div>
 
-                {/* CAIXA DE TAXA FEDERAL (COM A NOVA UX) */}
                 <div style={{ flex: '1 1 300px', backgroundColor: '#e9ecef', padding: '15px', borderRadius: '8px', border: '1px solid #ced4da' }}>
                   <h4 style={{ margin: '0 0 10px 0', color: '#495057' }}>🏛️ Pagamento Taxa Federal</h4>
                   <label style={labelStyle}>Valor da Taxa (R$)</label>
@@ -388,10 +399,19 @@ function Painel() {
               </div>
 
               <div style={{ display: 'flex', gap: '15px', backgroundColor: '#e2e3e5', padding: '15px', borderRadius: '8px', border: '1px solid #d6d8db', flexWrap: 'wrap' }}>
-                <div style={{ flex: '1 1 200px' }}>
+                <div style={{ flex: '1 1 150px' }}>
                   <label style={labelStyle}>% Venda Direta</label>
                   <input type="number" step="any" placeholder="Ex: 7" value={perVendaDireta} onChange={(e) => setPerVendaDireta(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: '5px' }} />
                 </div>
+                
+                {/* CAMPO NOVO QUE SÓ APARECE NAS CONDIÇÕES CERTAS */}
+                {mostrarCampoBonus && (
+                  <div style={{ flex: '1 1 150px', backgroundColor: '#fff3cd', padding: '10px', borderRadius: '4px', border: '1px dashed #fd7e14' }}>
+                    <label style={{...labelStyle, color: '#fd7e14', marginTop: 0}}>% Bônus Pagamento</label>
+                    <input type="number" step="any" placeholder="Ex: 2" value={perBonusPagamento} onChange={(e) => setPerBonusPagamento(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: '5px' }} />
+                  </div>
+                )}
+
                 <div style={{ flex: '1 1 200px' }}>
                   <label style={labelStyle}>% Representante</label>
                   <input type="number" step="any" placeholder="Ex: 3" value={perRepresentante} onChange={(e) => setPerRepresentante(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: '5px' }} />
@@ -428,7 +448,6 @@ function Painel() {
         </form>
       </div>
 
-      {/* Tabela Resumo */}
       <div style={{ maxWidth: '1000px', margin: '20px auto' }}>
         <input type="text" placeholder="🔍 Pesquisar por marca, vendedor ou observações..." value={busca} onChange={(e) => setBusca(e.target.value)} style={{ width: '100%', padding: '15px', borderRadius: '8px', border: '1px solid #ccc', fontSize: '16px', boxSizing: 'border-box' }} />
       </div>
@@ -506,6 +525,7 @@ const cardStyle = { flex: '1 1 250px', backgroundColor: 'white', padding: '20px'
 const btnAmarelo = { padding: '10px 15px', backgroundColor: '#ffc107', color: '#333', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' };
 const btnLaranja = { padding: '10px 15px', backgroundColor: '#fd7e14', color: 'white', textDecoration: 'none', borderRadius: '4px', fontWeight: 'bold', display: 'flex', alignItems: 'center' };
 const btnAzul = { padding: '10px 15px', backgroundColor: '#007bff', color: 'white', textDecoration: 'none', borderRadius: '4px', fontWeight: 'bold', display: 'flex', alignItems: 'center' };
+const btnBonus = { padding: '10px 15px', backgroundColor: '#fd7e14', color: 'white', textDecoration: 'none', borderRadius: '4px', fontWeight: 'bold', display: 'flex', alignItems: 'center' };
 const btnVermelho = { padding: '10px 15px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' };
 
 export default Painel;

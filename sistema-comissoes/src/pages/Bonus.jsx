@@ -2,14 +2,11 @@ import { useState, useEffect } from 'react';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Link } from 'react-router-dom';
-// SAEM AS IMPORTAÇÕES ANTIGAS E ENTRAM AS NOVAS MÁGICAS
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 
-function Relatorio() {
-  const [vendasDiretas, setVendasDiretas] = useState({});
-  const [representantes, setRepresentantes] = useState({});
-  const [encarregadas, setEncarregadas] = useState({});
+function Bonus() {
+  const [bonusPagamento, setBonusPagamento] = useState({});
   const [mesFiltro, setMesFiltro] = useState(new Date().getMonth() + 1);
 
   const formatarDataBR = (dataString) => {
@@ -25,9 +22,7 @@ function Relatorio() {
     const q = query(collection(db, 'lancamentos'), orderBy('dataLancamento', 'desc'));
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const gruposVendaDireta = {};
-      const gruposRepresentante = {};
-      const gruposEncarregada = {};
+      const gruposBonus = {};
 
       const inicializarPessoa = (grupo, nome) => {
         if (!grupo[nome]) grupo[nome] = { transacoes: [], total: 0 };
@@ -55,90 +50,72 @@ function Relatorio() {
       contratosDoMes.forEach((doc) => {
         const c = doc.data();
         const vendedor = c.vendedor || 'Desconhecido';
-        const representante = c.representante || '';
-        const encarregada = c.encarregada || '';
         const valorBase = Number(c.valorAssessoria) || 0;
-        
-        const pVenda = Number(c.perVendaDireta) || 0;
-        const pRep = Number(c.perRepresentante) || 0;
-        const pEnc = Number(c.perEncarregada) || 0;
+        const pBonus = Number(c.perBonusPagamento) || 0; 
+        const forma = c.formaPagAssessoria || '';
 
-        let msgStatus = 'PAGO';
-        if (c.statusAssessoria !== 'Pago') {
-            if (c.statusTaxaFederal === 'Pago') {
-                msgStatus = 'PAGOU SÓ A TAXA';
-            } else {
-                msgStatus = 'EM ABERTO';
-            }
-        }
+        const formasAceitas = ['Cartão de Crédito', 'Cartão de Débito', 'Cartão Recorrente', 'Pix', 'Boleto'];
 
-        inicializarPessoa(gruposVendaDireta, vendedor);
-        let ganhoVenda = msgStatus === 'PAGO' ? valorBase * (pVenda / 100) : 0;
-        gruposVendaDireta[vendedor].transacoes.push({ ...c, percAplicado: pVenda, valorRecebido: ganhoVenda, aviso: msgStatus });
-        gruposVendaDireta[vendedor].total += ganhoVenda;
+        if (formasAceitas.includes(forma)) {
+          
+          // MÁGICA ATUALIZADA: IDENTIFICA SE PAGOU SÓ A TAXA
+          let msgStatus = 'PAGO';
+          if (c.statusAssessoria !== 'Pago') {
+              if (c.statusTaxaFederal === 'Pago') {
+                  msgStatus = 'PAGOU SÓ A TAXA';
+              } else {
+                  msgStatus = 'EM ABERTO';
+              }
+          }
 
-        if (pRep > 0 && representante) {
-          inicializarPessoa(gruposRepresentante, representante);
-          let ganhoRep = msgStatus === 'PAGO' ? valorBase * (pRep / 100) : 0;
-          gruposRepresentante[representante].transacoes.push({ ...c, tipo: `Da equipe de: ${vendedor}`, percAplicado: pRep, valorRecebido: ganhoRep, aviso: msgStatus });
-          gruposRepresentante[representante].total += ganhoRep;
-        }
+          const valorGanho = msgStatus === 'PAGO' ? valorBase * (pBonus / 100) : 0;
 
-        if (pEnc > 0 && encarregada) {
-          inicializarPessoa(gruposEncarregada, encarregada);
-          let ganhoEnc = msgStatus === 'PAGO' ? valorBase * (pEnc / 100) : 0;
-          gruposEncarregada[encarregada].transacoes.push({ ...c, tipo: `Da equipe de: ${vendedor}`, percAplicado: pEnc, valorRecebido: ganhoEnc, aviso: msgStatus });
-          gruposEncarregada[encarregada].total += ganhoEnc;
+          inicializarPessoa(gruposBonus, vendedor);
+          gruposBonus[vendedor].transacoes.push({ 
+            ...c, 
+            aviso: msgStatus, 
+            percAplicado: pBonus, 
+            valorRecebido: valorGanho 
+          });
+          gruposBonus[vendedor].total += valorGanho;
         }
       });
 
-      setVendasDiretas(gruposVendaDireta);
-      setRepresentantes(gruposRepresentante);
-      setEncarregadas(gruposEncarregada);
+      setBonusPagamento(gruposBonus);
     });
 
     return () => unsubscribe();
   }, [mesFiltro]);
 
-  // A NOVA FUNÇÃO DE EXPORTAÇÃO COM DESIGN PROFISSIONAL
-  const exportarExcelComissoes = async () => {
+  const exportarExcelBonus = async () => {
     const workbook = new ExcelJS.Workbook();
 
-    const criarAba = (nomeAba, corHex, dadosAgrupados, tipoLideranca = null) => {
-      if (Object.keys(dadosAgrupados).length === 0) return;
-      const sheet = workbook.addWorksheet(nomeAba);
+    if (Object.keys(bonusPagamento).length > 0) {
+      const sheet = workbook.addWorksheet('Bônus Especiais');
 
-      // 1. Configurar o tamanho das colunas
-      const colunas = [
-        { header: tipoLideranca || 'VENDEDOR(A)', key: 'nome', width: 25 }
-      ];
-      if (tipoLideranca) {
-        colunas.push({ header: 'VENDA DE', key: 'vendedorReal', width: 25 });
-      }
-      colunas.push(
+      sheet.columns = [
+        { header: 'VENDEDOR(A)', key: 'nome', width: 25 },
         { header: 'MARCA', key: 'marca', width: 30 },
         { header: 'SITUAÇÃO / CONTRATO', key: 'situacao', width: 25 },
+        { header: 'FORMA PAGAMENTO', key: 'forma', width: 25 },
         { header: 'FECHADO EM', key: 'fechou', width: 15 },
         { header: 'PAGO EM', key: 'pagou', width: 15 },
         { header: 'VALOR BASE', key: 'base', width: 15 },
-        { header: '% APLICADA', key: 'perc', width: 15 },
-        { header: 'COMISSÃO A PAGAR', key: 'comissao', width: 20 }
-      );
-      sheet.columns = colunas;
+        { header: '% BÔNUS', key: 'perc', width: 15 },
+        { header: 'BÔNUS A PAGAR', key: 'comissao', width: 20 }
+      ];
 
-      // 2. Pintar o Cabeçalho
       const headerRow = sheet.getRow(1);
-      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } }; // Fonte Branca
-      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: corHex.replace('#', 'FF') } }; // Cor Dinâmica
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFD7E14' } }; 
       headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
 
-      // 3. Preencher os Dados
-      Object.entries(dadosAgrupados).forEach(([nomePessoa, dados]) => {
+      Object.entries(bonusPagamento).forEach(([nomePessoa, dados]) => {
         dados.transacoes.forEach((t) => {
           const linhaDado = {
             nome: nomePessoa,
-            ...(tipoLideranca ? { vendedorReal: t.vendedor } : {}),
             marca: t.marca,
+            forma: t.formaPagAssessoria,
             fechou: t.dataFechamento ? formatarDataBR(t.dataFechamento) : 'Sem Data'
           };
 
@@ -158,36 +135,30 @@ function Relatorio() {
 
           const row = sheet.addRow(linhaDado);
 
-          // 4. Formatações Especiais nas Linhas
           if (t.aviso !== 'PAGO') {
-            // Pinta a palavra EM ABERTO de vermelho ou PAGOU SÓ TAXA de laranja
+            // COLORE O EXCEL DE LARANJA SE FOR TAXA E VERMELHO SE FOR EM ABERTO
             row.getCell('situacao').font = { 
               bold: true, 
               color: { argb: t.aviso === 'EM ABERTO' ? 'FFDC3545' : 'FFFD7E14' } 
             };
           } else {
-            // Formata os números como Moeda (R$)
             row.getCell('base').numFmt = '"R$" #,##0.00';
             row.getCell('comissao').numFmt = '"R$" #,##0.00';
-            row.getCell('comissao').font = { bold: true, color: { argb: 'FF28A745' } }; // Comissão em Verde
+            row.getCell('comissao').font = { bold: true, color: { argb: 'FF28A745' } }; 
           }
         });
-        
-        // Pula uma linha em branco entre um vendedor e outro para ficar organizado
         sheet.addRow({}); 
       });
-    };
+    } else {
+      alert("Nenhum bônus encontrado para este mês.");
+      return;
+    }
 
-    criarAba('Vendas Diretas', '#28a745', vendasDiretas, null);
-    criarAba('Representantes', '#007bff', representantes, 'REPRESENTANTE');
-    criarAba('Encarregadas', '#6f42c1', encarregadas, 'ENCARREGADA');
-
-    // Salvar o arquivo
     const buffer = await workbook.xlsx.writeBuffer();
-    saveAs(new Blob([buffer]), `Comissoes_Mes_${mesFiltro}.xlsx`);
+    saveAs(new Blob([buffer]), `Bonus_Pagamentos_Mes_${mesFiltro}.xlsx`);
   };
 
-  const renderTabela = (titulo, corBg, dadosAgrupados, isLideranca = false) => {
+  const renderTabelaBonus = (titulo, corBg, dadosAgrupados) => {
     if (Object.keys(dadosAgrupados).length === 0) return null;
     return (
       <div style={{ marginBottom: '50px' }}>
@@ -198,21 +169,20 @@ function Relatorio() {
               {nome.toUpperCase()}
             </div>
             <div style={{ overflowX: 'auto' }}>
-              <table className="tabela-print" style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', minWidth: '700px' }}>
+              <table className="tabela-print" style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', minWidth: '800px' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#f8f9fa' }}>
-                    {isLideranca && <th style={thStyle}>VENDA DE</th>}
                     <th style={thStyle}>MARCA / DATAS</th>
                     <th style={thStyle}>CONTRATO / OS</th>
+                    <th style={thStyle}>FORMA DE PAGAMENTO</th>
                     <th style={thStyle}>VALOR BASE</th>
                     <th style={thStyle}>% APLICADA</th>
-                    <th style={thStyle}>COMISSÃO A PAGAR</th>
+                    <th style={thStyle}>BÔNUS A PAGAR</th>
                   </tr>
                 </thead>
                 <tbody>
                   {dados.transacoes.map((t, index) => (
                     <tr key={index} style={{ backgroundColor: t.aviso !== 'PAGO' ? '#fdf8f5' : 'transparent' }}>
-                      {isLideranca && <td style={{...tdStyle, color: '#666', fontStyle: 'italic'}}>{t.vendedor}</td>}
                       
                       {t.aviso === 'PAGO' ? (
                         <>
@@ -222,6 +192,7 @@ function Relatorio() {
                             <span style={{fontSize: '11px', color: '#155724', fontWeight: 'bold'}}>Pagou: {formatarDataBR(t.dataPagAssessoria) || '-'}</span>
                           </td>
                           <td style={{ ...tdStyle, fontWeight: 'bold' }}>CT: {t.contrato || '-'}<br/><span style={{fontSize: '12px', fontWeight: 'normal'}}>OS: {t.os || '-'}</span></td>
+                          <td style={tdStyle}><strong>{t.formaPagAssessoria}</strong></td>
                           <td style={tdStyle}>R$ {Number(t.valorAssessoria).toFixed(2)}</td>
                           <td style={tdStyle}>{t.percAplicado}%</td>
                           <td style={{...tdStyle, color: '#28a745', fontWeight: 'bold', whiteSpace: 'nowrap'}}>R$ {t.valorRecebido.toFixed(2)}</td>
@@ -232,7 +203,8 @@ function Relatorio() {
                             <strong>{t.marca}</strong><br/>
                             <span style={{fontSize: '11px', color: '#64748b'}}>Fechou: {formatarDataBR(t.dataFechamento) || '-'}</span>
                           </td>
-                          <td colSpan="4" style={{...tdStyle, textAlign: 'center', fontWeight: 'bold', letterSpacing: '1px', color: t.aviso === 'EM ABERTO' ? '#dc3545' : '#fd7e14', whiteSpace: 'nowrap' }}>
+                          {/* COLORE A FONTE BASEADO NA MENSAGEM */}
+                          <td colSpan="5" style={{...tdStyle, textAlign: 'center', fontWeight: 'bold', letterSpacing: '1px', color: t.aviso === 'EM ABERTO' ? '#dc3545' : '#fd7e14', whiteSpace: 'nowrap'}}>
                             {t.aviso}
                           </td>
                         </>
@@ -244,8 +216,8 @@ function Relatorio() {
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
               <div style={{ border: '1px solid #000', padding: '15px', borderRadius: '4px', backgroundColor: '#fafafa', width: '300px' }} className="print-total-box">
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#28a745', fontWeight: 'bold', fontSize: '18px' }}>
-                  <span>TOTAL A RECEBER:</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#fd7e14', fontWeight: 'bold', fontSize: '18px' }}>
+                  <span>TOTAL DE BÔNUS:</span>
                   <span>R$ {dados.total.toFixed(2)}</span>
                 </div>
               </div>
@@ -262,8 +234,8 @@ function Relatorio() {
         <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', gap: '15px', flexWrap: 'wrap' }}>
           
           <div>
-            <h2 style={{ color: '#333', margin: 0 }}>📊 Relatório de Comissões</h2>
-            <p style={{ margin: '5px 0 0 0', color: '#666', fontSize: '14px' }}>Contratos em aberto constam apenas como aviso visual e não somam no total.</p>
+            <h2 style={{ color: '#fd7e14', margin: 0 }}>🟠 Bônus Especiais por Pagamento</h2>
+            <p style={{ margin: '5px 0 0 0', color: '#666', fontSize: '14px' }}>Pix, Boletos e Cartões lançados pelo Financeiro.</p>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#f8f9fa', padding: '8px 15px', borderRadius: '8px', border: '1px solid #ddd' }}>
@@ -273,22 +245,18 @@ function Relatorio() {
             </select>
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button onClick={exportarExcelComissoes} style={btnExcel}>📊 Excel Comissões</button>
+            <button onClick={exportarExcelBonus} style={btnExcel}>📊 Excel de Bônus</button>
             <button onClick={window.print} style={btnPdf}>📄 Imprimir PDF</button>
             <Link to="/painel" style={btnVoltar}>⬅ Voltar</Link>
           </div>
         </div>
         
-        {Object.keys(vendasDiretas).length === 0 && Object.keys(representantes).length === 0 && Object.keys(encarregadas).length === 0 ? (
+        {Object.keys(bonusPagamento).length === 0 ? (
           <div style={{textAlign: 'center', padding: '40px', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px dashed #ccc'}}>
-            <p style={{color: '#666', fontSize: '16px', margin: 0}}>Nenhum contrato encontrado para este mês.</p>
+            <p style={{color: '#666', fontSize: '16px', margin: 0}}>Nenhum bônus especial encontrado para este mês.</p>
           </div>
         ) : (
-          <>
-            {renderTabela('🟢 Comissões de Vendas Diretas', '#28a745', vendasDiretas, false)}
-            {renderTabela('🔵 Comissões de Representantes', '#007bff', representantes, true)}
-            {renderTabela('🟣 Comissões de Encarregadas', '#6f42c1', encarregadas, true)}
-          </>
+          renderTabelaBonus('🟠 Comissões de Bônus (Pix/Boleto/Cartão)', '#fd7e14', bonusPagamento)
         )}
       </div>
 
@@ -316,9 +284,9 @@ function Relatorio() {
 }
 
 const btnPdf = { padding: '10px 15px', backgroundColor: '#17a2b8', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' };
-const btnExcel = { padding: '10px 15px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' };
+const btnExcel = { padding: '10px 15px', backgroundColor: '#fd7e14', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' };
 const btnVoltar = { padding: '10px 15px', backgroundColor: '#6c757d', color: 'white', textDecoration: 'none', borderRadius: '4px', fontWeight: 'bold' };
 const thStyle = { padding: '10px', textAlign: 'left', border: '1px solid #000', fontSize: '13px' };
 const tdStyle = { padding: '10px', textAlign: 'left', border: '1px solid #000', fontSize: '13px' };
 
-export default Relatorio;
+export default Bonus;
