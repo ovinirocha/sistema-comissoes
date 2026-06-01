@@ -22,22 +22,25 @@ function Painel() {
   const [contrato, setContrato] = useState('');
   const [os, setOs] = useState('');
   const [vendedorSelecionado, setVendedorSelecionado] = useState('');
-  const [telefone, setTelefone] = useState(''); // ADICIONADO: Estado do telefone
+  const [telefone, setTelefone] = useState(''); 
   const [observacao, setObservacao] = useState(''); 
+  const [dataFechamento, setDataFechamento] = useState(''); 
   
-  // Campos Assessoria (Só Financeiro edita)
+  // Campos Assessoria (A NOVA LÓGICA DE UX AQUI)
   const [valorAssessoria, setValorAssessoria] = useState('');
-  const [statusAssessoria, setStatusAssessoria] = useState('Em Aberto');
   const [formaPagAssessoria, setFormaPagAssessoria] = useState('');
+  const [statusAssessoria, setStatusAssessoria] = useState('Em Aberto');
+  const [dataVencimentoAssessoria, setDataVencimentoAssessoria] = useState(''); // NOVO: Vencimento
   const [dataPagAssessoria, setDataPagAssessoria] = useState('');
 
-  // Campos Taxa Federal (Só Financeiro edita)
+  // Campos Taxa Federal
   const [valorTaxaFederal, setValorTaxaFederal] = useState('');
-  const [statusTaxaFederal, setStatusTaxaFederal] = useState('Em Aberto');
   const [formaPagTaxaFederal, setFormaPagTaxaFederal] = useState('');
+  const [statusTaxaFederal, setStatusTaxaFederal] = useState('Em Aberto');
+  const [dataVencimentoTaxaFederal, setDataVencimentoTaxaFederal] = useState(''); // NOVO: Vencimento
   const [dataPagTaxaFederal, setDataPagTaxaFederal] = useState('');
 
-  // Porcentagens e Lideranças (Só Financeiro)
+  // Porcentagens e Lideranças
   const [perVendaDireta, setPerVendaDireta] = useState('');
   const [perRepresentante, setPerRepresentante] = useState('');
   const [representanteSelecionado, setRepresentanteSelecionado] = useState('');
@@ -118,17 +121,20 @@ function Painel() {
         contrato: contrato,
         os: os,
         vendedor: vendedorSelecionado,
-        telefone: telefone, // Salvando o telefone no Firebase
+        telefone: telefone, 
         observacao: observacao, 
+        dataFechamento: dataFechamento, 
         
         valorAssessoria: tratarNumero(valorAssessoria),
-        statusAssessoria: isFinanceiro ? statusAssessoria : 'Em Aberto',
         formaPagAssessoria: isFinanceiro ? formaPagAssessoria : '',
+        statusAssessoria: isFinanceiro ? statusAssessoria : 'Em Aberto',
+        dataVencimentoAssessoria: isFinanceiro ? dataVencimentoAssessoria : '',
         dataPagAssessoria: isFinanceiro ? dataPagAssessoria : '',
 
         valorTaxaFederal: isFinanceiro ? tratarNumero(valorTaxaFederal) : 0,
-        statusTaxaFederal: isFinanceiro ? statusTaxaFederal : 'Em Aberto',
         formaPagTaxaFederal: isFinanceiro ? formaPagTaxaFederal : '',
+        statusTaxaFederal: isFinanceiro ? statusTaxaFederal : 'Em Aberto',
+        dataVencimentoTaxaFederal: isFinanceiro ? dataVencimentoTaxaFederal : '',
         dataPagTaxaFederal: isFinanceiro ? dataPagTaxaFederal : '',
 
         perVendaDireta: isFinanceiro ? tratarNumero(perVendaDireta) : 0,
@@ -160,17 +166,20 @@ function Painel() {
     setContrato(item.contrato || '');
     setOs(item.os || '');
     setVendedorSelecionado(item.vendedor || '');
-    setTelefone(item.telefone || ''); // Resgatando o telefone
+    setTelefone(item.telefone || ''); 
     setObservacao(item.observacao || ''); 
+    setDataFechamento(item.dataFechamento || ''); 
     
     setValorAssessoria(item.valorAssessoria || '');
-    setStatusAssessoria(item.statusAssessoria || 'Em Aberto');
     setFormaPagAssessoria(item.formaPagAssessoria || '');
+    setStatusAssessoria(item.statusAssessoria || 'Em Aberto');
+    setDataVencimentoAssessoria(item.dataVencimentoAssessoria || '');
     setDataPagAssessoria(item.dataPagAssessoria || '');
 
     setValorTaxaFederal(item.valorTaxaFederal || '');
-    setStatusTaxaFederal(item.statusTaxaFederal || 'Em Aberto');
     setFormaPagTaxaFederal(item.formaPagTaxaFederal || '');
+    setStatusTaxaFederal(item.statusTaxaFederal || 'Em Aberto');
+    setDataVencimentoTaxaFederal(item.dataVencimentoTaxaFederal || '');
     setDataPagTaxaFederal(item.dataPagTaxaFederal || '');
 
     setPerVendaDireta(item.perVendaDireta || '');
@@ -206,15 +215,18 @@ function Painel() {
     setVendedorSelecionado('');
     setTelefone('');
     setObservacao('');
+    setDataFechamento('');
     
     setValorAssessoria('');
-    setStatusAssessoria('Em Aberto');
     setFormaPagAssessoria('');
+    setStatusAssessoria('Em Aberto');
+    setDataVencimentoAssessoria('');
     setDataPagAssessoria('');
 
     setValorTaxaFederal('');
-    setStatusTaxaFederal('Em Aberto');
     setFormaPagTaxaFederal('');
+    setStatusTaxaFederal('Em Aberto');
+    setDataVencimentoTaxaFederal('');
     setDataPagTaxaFederal('');
 
     setPerVendaDireta('');
@@ -263,70 +275,112 @@ function Painel() {
 
         <form onSubmit={handleSalvar} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
-          {/* DADOS BÁSICOS - INCLUINDO TELEFONE */}
           <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', backgroundColor: '#f8f9fa', padding: '15px', border: '1px solid #ddd', borderRadius: '8px' }}>
-            <select value={vendedorSelecionado} onChange={(e) => setVendedorSelecionado(e.target.value)} required style={{...inputStyle, flex: '1 1 200px'}}>
-              <option value="" disabled>Selecione o Vendedor Principal...</option>
-              {vendedoresLista.map((v) => <option key={v.id} value={v.nome}>{v.nome}</option>)}
-            </select>
-            <input type="text" placeholder="Nome da Marca" value={marca} onChange={(e) => setMarca(e.target.value)} required style={{...inputStyle, flex: '1 1 200px'}} />
-            <input type="text" placeholder="Telefone do Cliente" value={telefone} onChange={(e) => setTelefone(e.target.value)} style={{ ...inputStyle, flex: '1 1 150px' }} />
-            <input type="text" placeholder="Nº do Contrato" value={contrato} onChange={(e) => setContrato(e.target.value)} style={{ ...inputStyle, flex: '1 1 120px' }} />
-            <input type="text" placeholder="Nº da OS" value={os} onChange={(e) => setOs(e.target.value)} style={{ ...inputStyle, flex: '1 1 120px' }} />
-            <input type="number" step="any" placeholder="Valor da Assessoria (R$)" value={valorAssessoria} onChange={(e) => setValorAssessoria(e.target.value)} required style={{...inputStyle, flex: '1 1 150px'}} />
+            <div style={{ flex: '1 1 200px' }}>
+              <label style={{ fontSize: '12px', color: '#666', fontWeight: 'bold' }}>Vendedor Principal:</label>
+              <select value={vendedorSelecionado} onChange={(e) => setVendedorSelecionado(e.target.value)} required style={{...inputStyle, width: '100%', marginTop: '2px'}}>
+                <option value="" disabled>Selecione...</option>
+                {vendedoresLista.map((v) => <option key={v.id} value={v.nome}>{v.nome}</option>)}
+              </select>
+            </div>
+            <div style={{ flex: '1 1 150px' }}>
+               <label style={{ fontSize: '12px', color: '#666', fontWeight: 'bold' }}>Contrato Fechado Em:</label>
+               <input type="date" value={dataFechamento} onChange={(e) => setDataFechamento(e.target.value)} required style={{...inputStyle, width: '100%', marginTop: '2px'}} />
+            </div>
+            <div style={{ flex: '1 1 200px' }}>
+               <label style={{ fontSize: '12px', color: '#666', fontWeight: 'bold' }}>Marca:</label>
+               <input type="text" placeholder="Nome da Marca" value={marca} onChange={(e) => setMarca(e.target.value)} required style={{...inputStyle, width: '100%', marginTop: '2px'}} />
+            </div>
+            <div style={{ flex: '1 1 150px' }}>
+               <label style={{ fontSize: '12px', color: '#666', fontWeight: 'bold' }}>Telefone do Cliente:</label>
+               <input type="text" placeholder="(XX) 99999-9999" value={telefone} onChange={(e) => setTelefone(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: '2px' }} />
+            </div>
+            <div style={{ flex: '1 1 120px' }}>
+               <label style={{ fontSize: '12px', color: '#666', fontWeight: 'bold' }}>Nº Contrato:</label>
+               <input type="text" placeholder="Ex: 1234" value={contrato} onChange={(e) => setContrato(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: '2px' }} />
+            </div>
+            <div style={{ flex: '1 1 120px' }}>
+               <label style={{ fontSize: '12px', color: '#666', fontWeight: 'bold' }}>Nº OS:</label>
+               <input type="text" placeholder="Ex: 5678" value={os} onChange={(e) => setOs(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: '2px' }} />
+            </div>
+            <div style={{ flex: '1 1 150px' }}>
+               <label style={{ fontSize: '12px', color: '#666', fontWeight: 'bold' }}>Valor Assessoria (R$):</label>
+               <input type="number" step="any" placeholder="Ex: 1000.00" value={valorAssessoria} onChange={(e) => setValorAssessoria(e.target.value)} required style={{...inputStyle, width: '100%', marginTop: '2px'}} />
+            </div>
           </div>
 
-          {/* ÁREA DO FINANCEIRO */}
           {isFinanceiro && (
             <>
               <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                {/* CAIXA DE ASSESSORIA (COM A NOVA UX) */}
                 <div style={{ flex: '1 1 300px', backgroundColor: '#e9ecef', padding: '15px', borderRadius: '8px', border: '1px solid #ced4da' }}>
                   <h4 style={{ margin: '0 0 10px 0', color: '#495057' }}>📌 Pagamento Assessoria</h4>
+                  
+                  <label style={labelStyle}>Forma de Pagamento</label>
+                  <select value={formaPagAssessoria} onChange={(e) => setFormaPagAssessoria(e.target.value)} style={{...inputStyle, width: '100%', marginBottom: '10px'}}>
+                    <option value="">Selecione...</option>
+                    <option value="Boleto">Boleto</option>
+                    <option value="Pix">Pix</option>
+                    <option value="Cartão de Crédito">Cartão de Crédito</option>
+                    <option value="Cartão de Débito">Cartão de Débito</option>
+                    <option value="Cartão Recorrente">Cartão Recorrente</option>
+                    <option value="Transferência">Transferência</option>
+                  </select>
+
                   <label style={labelStyle}>Status</label>
                   <select value={statusAssessoria} onChange={(e) => setStatusAssessoria(e.target.value)} style={{...inputStyle, width: '100%', marginBottom: '10px'}}>
                     <option value="Em Aberto">Em Aberto</option>
                     <option value="Pago">Pago</option>
                   </select>
+
+                  {statusAssessoria === 'Em Aberto' && (
+                    <>
+                      <label style={labelStyle}>Data de Vencimento (Previsão)</label>
+                      <input type="date" value={dataVencimentoAssessoria} onChange={(e) => setDataVencimentoAssessoria(e.target.value)} style={{...inputStyle, width: '100%'}} />
+                    </>
+                  )}
+
                   {statusAssessoria === 'Pago' && (
                     <>
-                      <label style={labelStyle}>Forma de Pagamento</label>
-                      <select value={formaPagAssessoria} onChange={(e) => setFormaPagAssessoria(e.target.value)} style={{...inputStyle, width: '100%', marginBottom: '10px'}}>
-                        <option value="">Selecione...</option>
-                        <option value="Pix">Pix</option>
-                        <option value="Boleto">Boleto</option>
-                        <option value="Cartão de Crédito">Cartão de Crédito</option>
-                        <option value="Cartão de Débito">Cartão de Débito</option>
-                        <option value="Cartão Recorrente">Cartão Recorrente</option>
-                        <option value="Transferência">Transferência</option>
-                      </select>
-                      <label style={labelStyle}>Data do Pagamento</label>
+                      <label style={labelStyle}>Data do Pagamento (Caiu na conta)</label>
                       <input type="date" value={dataPagAssessoria} onChange={(e) => setDataPagAssessoria(e.target.value)} style={{...inputStyle, width: '100%'}} />
                     </>
                   )}
                 </div>
 
+                {/* CAIXA DE TAXA FEDERAL (COM A NOVA UX) */}
                 <div style={{ flex: '1 1 300px', backgroundColor: '#e9ecef', padding: '15px', borderRadius: '8px', border: '1px solid #ced4da' }}>
                   <h4 style={{ margin: '0 0 10px 0', color: '#495057' }}>🏛️ Pagamento Taxa Federal</h4>
                   <label style={labelStyle}>Valor da Taxa (R$)</label>
                   <input type="number" step="any" placeholder="Ex: 150.00" value={valorTaxaFederal} onChange={(e) => setValorTaxaFederal(e.target.value)} style={{...inputStyle, width: '100%', marginBottom: '10px'}} />
+                  
+                  <label style={labelStyle}>Forma de Pagamento</label>
+                  <select value={formaPagTaxaFederal} onChange={(e) => setFormaPagTaxaFederal(e.target.value)} style={{...inputStyle, width: '100%', marginBottom: '10px'}}>
+                    <option value="">Selecione...</option>
+                    <option value="Boleto">Boleto</option>
+                    <option value="Pix">Pix</option>
+                    <option value="Cartão de Crédito">Cartão de Crédito</option>
+                    <option value="Cartão de Débito">Cartão de Débito</option>
+                    <option value="Cartão Recorrente">Cartão Recorrente</option>
+                    <option value="Transferência">Transferência</option>
+                  </select>
+
                   <label style={labelStyle}>Status</label>
                   <select value={statusTaxaFederal} onChange={(e) => setStatusTaxaFederal(e.target.value)} style={{...inputStyle, width: '100%', marginBottom: '10px'}}>
                     <option value="Em Aberto">Em Aberto</option>
                     <option value="Pago">Pago</option>
                   </select>
+
+                  {statusTaxaFederal === 'Em Aberto' && (
+                    <>
+                      <label style={labelStyle}>Data de Vencimento (Previsão)</label>
+                      <input type="date" value={dataVencimentoTaxaFederal} onChange={(e) => setDataVencimentoTaxaFederal(e.target.value)} style={{...inputStyle, width: '100%'}} />
+                    </>
+                  )}
+
                   {statusTaxaFederal === 'Pago' && (
                     <>
-                      <label style={labelStyle}>Forma de Pagamento</label>
-                      <select value={formaPagTaxaFederal} onChange={(e) => setFormaPagTaxaFederal(e.target.value)} style={{...inputStyle, width: '100%', marginBottom: '10px'}}>
-                        <option value="">Selecione...</option>
-                        <option value="Pix">Pix</option>
-                        <option value="Boleto">Boleto</option>
-                        <option value="Cartão de Crédito">Cartão de Crédito</option>
-                        <option value="Cartão de Débito">Cartão de Débito</option>
-                        <option value="Cartão Recorrente">Cartão Recorrente</option>
-                        <option value="Transferência">Transferência</option>
-                      </select>
-                      <label style={labelStyle}>Data do Pagamento</label>
+                      <label style={labelStyle}>Data do Pagamento (Caiu na conta)</label>
                       <input type="date" value={dataPagTaxaFederal} onChange={(e) => setDataPagTaxaFederal(e.target.value)} style={{...inputStyle, width: '100%'}} />
                     </>
                   )}
@@ -359,8 +413,8 @@ function Painel() {
           )}
 
           <div style={{ backgroundColor: '#f8f9fa', padding: '15px', border: '1px solid #ddd', borderRadius: '8px' }}>
-            <label style={labelStyle}>Observações Internas (Ex: Vai pagar tal dia, observações de cobrança)</label>
-            <input type="text" placeholder="Digite avisos ou prazos acordados..." value={observacao} onChange={(e) => setObservacao(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: '5px' }} />
+            <label style={labelStyle}>Observações Internas (Ex: avisos, detalhes de negociação...)</label>
+            <input type="text" placeholder="Digite avisos gerais..." value={observacao} onChange={(e) => setObservacao(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: '5px' }} />
           </div>
 
           <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
@@ -374,6 +428,7 @@ function Painel() {
         </form>
       </div>
 
+      {/* Tabela Resumo */}
       <div style={{ maxWidth: '1000px', margin: '20px auto' }}>
         <input type="text" placeholder="🔍 Pesquisar por marca, vendedor ou observações..." value={busca} onChange={(e) => setBusca(e.target.value)} style={{ width: '100%', padding: '15px', borderRadius: '8px', border: '1px solid #ccc', fontSize: '16px', boxSizing: 'border-box' }} />
       </div>
@@ -398,7 +453,8 @@ function Painel() {
                 <tr key={item.id} style={{ borderBottom: '1px solid #eee' }}>
                   <td style={{ ...tdStyle, fontWeight: 'bold', color: '#007bff' }}>{item.vendedor}</td>
                   <td style={tdStyle}>
-                    <strong>{item.marca}</strong>
+                    <strong>{item.marca}</strong><br/>
+                    {item.dataFechamento && <span style={{ fontSize: '12px', color: '#666' }}>📅 Fechado: {item.dataFechamento.split('-').reverse().join('/')}</span>}
                     {item.observacao && (
                       <div style={{ fontSize: '12px', color: '#dc3545', marginTop: '4px', fontStyle: 'italic' }}>
                         💬 {item.observacao}
@@ -447,7 +503,6 @@ const labelStyle = { fontSize: '14px', color: '#555', fontWeight: 'bold', displa
 const thStyle = { padding: '12px', textAlign: 'left', color: '#555', whiteSpace: 'nowrap' };
 const tdStyle = { padding: '12px', color: '#333' };
 const cardStyle = { flex: '1 1 250px', backgroundColor: 'white', padding: '20px', borderRadius: '8px', textAlign: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' };
-
 const btnAmarelo = { padding: '10px 15px', backgroundColor: '#ffc107', color: '#333', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' };
 const btnLaranja = { padding: '10px 15px', backgroundColor: '#fd7e14', color: 'white', textDecoration: 'none', borderRadius: '4px', fontWeight: 'bold', display: 'flex', alignItems: 'center' };
 const btnAzul = { padding: '10px 15px', backgroundColor: '#007bff', color: 'white', textDecoration: 'none', borderRadius: '4px', fontWeight: 'bold', display: 'flex', alignItems: 'center' };

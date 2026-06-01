@@ -10,7 +10,17 @@ function Relatorio() {
   const [encarregadas, setEncarregadas] = useState({});
   const [mesFiltro, setMesFiltro] = useState(new Date().getMonth() + 1);
 
+  const formatarDataBR = (dataString) => {
+    if (!dataString) return '';
+    const partes = dataString.split('-');
+    if (partes.length === 3) {
+      return `${partes[2]}/${partes[1]}/${partes[0]}`;
+    }
+    return dataString;
+  };
+
   useEffect(() => {
+    // Puxa apenas o que já está com o status 'Pago' (Ignora os que estão "Em Aberto")
     const q = query(collection(db, 'lancamentos'), where('statusAssessoria', '==', 'Pago'));
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
@@ -24,15 +34,22 @@ function Relatorio() {
 
       const contratosDoMes = querySnapshot.docs.filter((doc) => {
         const c = doc.data();
-        let mesDoContrato = -1;
-        if (c.dataLancamento) {
-          mesDoContrato = typeof c.dataLancamento.toDate === 'function' 
+        let mesPagamento = -1;
+        
+        // FILTRO PELO MÊS DO PAGAMENTO
+        if (c.dataPagAssessoria) {
+          mesPagamento = parseInt(c.dataPagAssessoria.split('-')[1], 10);
+        } else if (c.dataFechamento) {
+          mesPagamento = parseInt(c.dataFechamento.split('-')[1], 10);
+        } else if (c.dataLancamento) {
+          mesPagamento = typeof c.dataLancamento.toDate === 'function' 
             ? c.dataLancamento.toDate().getMonth() + 1 
             : new Date(c.dataLancamento).getMonth() + 1;
         } else {
-          mesDoContrato = new Date().getMonth() + 1;
+          mesPagamento = new Date().getMonth() + 1;
         }
-        return mesDoContrato === Number(mesFiltro);
+        
+        return mesPagamento === Number(mesFiltro);
       });
 
       contratosDoMes.forEach((doc) => {
@@ -75,12 +92,12 @@ function Relatorio() {
   }, [mesFiltro]);
 
   const exportarExcelComissoes = () => {
-    const arquivo = XLSX.book_new();
+    const arquivo = XLSX.utils.book_new();
 
     const linhasVendas = [];
     Object.entries(vendasDiretas).forEach(([nome, dados]) => {
       dados.transacoes.forEach((t) => {
-        linhasVendas.push({ 'Vendedor(a)': nome, 'Marca': t.marca, 'Telefone': t.telefone || '-', 'Nº Contrato': t.contrato || '-', 'Valor Assessoria Base (R$)': t.valorAssessoria, '% Comissão': t.percAplicado, 'Comissão Ganha (R$)': t.valorRecebido });
+        linhasVendas.push({ 'Vendedor(a)': nome, 'Marca': t.marca, 'Telefone': t.telefone || '-', 'Nº Contrato': t.contrato || '-', 'Fechado Em': t.dataFechamento ? formatarDataBR(t.dataFechamento) : 'Sem Data', 'Pago Em': t.dataPagAssessoria ? formatarDataBR(t.dataPagAssessoria) : 'Sem Data', 'Valor Assessoria Base (R$)': t.valorAssessoria, '% Comissão': t.percAplicado, 'Comissão Ganha (R$)': t.valorRecebido });
       });
     });
     if(linhasVendas.length > 0) XLSX.utils.book_append_sheet(arquivo, XLSX.utils.json_to_sheet(linhasVendas), 'Vendas Diretas');
@@ -88,7 +105,7 @@ function Relatorio() {
     const linhasRep = [];
     Object.entries(representantes).forEach(([nome, dados]) => {
       dados.transacoes.forEach((t) => {
-        linhasRep.push({ 'Representante': nome, 'Venda Realizada Por': t.vendedor, 'Marca': t.marca, 'Nº Contrato': t.contrato || '-', 'Valor Assessoria Base (R$)': t.valorAssessoria, '% Comissão': t.percAplicado, 'Comissão Ganha (R$)': t.valorRecebido });
+        linhasRep.push({ 'Representante': nome, 'Venda Realizada Por': t.vendedor, 'Marca': t.marca, 'Nº Contrato': t.contrato || '-', 'Fechado Em': t.dataFechamento ? formatarDataBR(t.dataFechamento) : 'Sem Data', 'Pago Em': t.dataPagAssessoria ? formatarDataBR(t.dataPagAssessoria) : 'Sem Data', 'Valor Assessoria Base (R$)': t.valorAssessoria, '% Comissão': t.percAplicado, 'Comissão Ganha (R$)': t.valorRecebido });
       });
     });
     if(linhasRep.length > 0) XLSX.utils.book_append_sheet(arquivo, XLSX.utils.json_to_sheet(linhasRep), 'Representantes');
@@ -96,12 +113,12 @@ function Relatorio() {
     const linhasEnc = [];
     Object.entries(encarregadas).forEach(([nome, dados]) => {
       dados.transacoes.forEach((t) => {
-        linhasEnc.push({ 'Encarregada': nome, 'Venda Realizada Por': t.vendedor, 'Marca': t.marca, 'Nº Contrato': t.contrato || '-', 'Valor Assessoria Base (R$)': t.valorAssessoria, '% Comissão': t.percAplicado, 'Comissão Ganha (R$)': t.valorRecebido });
+        linhasEnc.push({ 'Encarregada': nome, 'Venda Realizada Por': t.vendedor, 'Marca': t.marca, 'Nº Contrato': t.contrato || '-', 'Fechado Em': t.dataFechamento ? formatarDataBR(t.dataFechamento) : 'Sem Data', 'Pago Em': t.dataPagAssessoria ? formatarDataBR(t.dataPagAssessoria) : 'Sem Data', 'Valor Assessoria Base (R$)': t.valorAssessoria, '% Comissão': t.percAplicado, 'Comissão Ganha (R$)': t.valorRecebido });
       });
     });
     if(linhasEnc.length > 0) XLSX.utils.book_append_sheet(arquivo, XLSX.utils.json_to_sheet(linhasEnc), 'Encarregadas');
 
-    XLSX.writeFile(arquivo, `Comissoes_Mes_${mesFiltro}.xlsx`);
+    XLSX.writeFile(arquivo, `Comissoes_Pagas_Mes_${mesFiltro}.xlsx`);
   };
 
   const renderTabela = (titulo, corBg, dadosAgrupados, isLideranca = false) => {
@@ -110,25 +127,31 @@ function Relatorio() {
       <div style={{ marginBottom: '50px' }}>
         <h3 style={{ borderBottom: `3px solid ${corBg}`, paddingBottom: '10px', color: '#333' }}>{titulo}</h3>
         {Object.entries(dadosAgrupados).map(([nome, dados]) => (
-          <div key={nome} style={{ marginBottom: '30px' }}>
+          <div key={nome} style={{ marginBottom: '30px', pageBreakInside: 'avoid' }}>
             <div style={{ backgroundColor: corBg, padding: '10px', textAlign: 'center', border: '1px solid #000', fontWeight: 'bold', fontSize: '18px', color: '#fff' }}>{nome.toUpperCase()}</div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', minWidth: '700px' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#f8f9fa' }}>
                     {isLideranca && <th style={thStyle}>VENDA DE</th>}
-                    <th style={thStyle}>MARCA</th>
+                    <th style={thStyle}>MARCA / DATAS</th>
                     <th style={thStyle}>CONTRATO / OS</th>
-                    <th style={thStyle}>VALOR ASSESSORIA</th>
+                    <th style={thStyle}>VALOR BASE</th>
                     <th style={thStyle}>% APLICADA</th>
-                    <th style={thStyle}>VALOR DA COMISSÃO</th>
+                    <th style={thStyle}>COMISSÃO A PAGAR</th>
                   </tr>
                 </thead>
                 <tbody>
                   {dados.transacoes.map((t, index) => (
                     <tr key={index}>
                       {isLideranca && <td style={{...tdStyle, color: '#666', fontStyle: 'italic'}}>{t.vendedor}</td>}
-                      <td style={tdStyle}>{t.marca}</td>
+                      
+                      <td style={tdStyle}>
+                        <strong>{t.marca}</strong><br/>
+                        <span style={{fontSize: '11px', color: '#64748b'}}>Fechou: {formatarDataBR(t.dataFechamento) || '-'}</span><br/>
+                        <span style={{fontSize: '11px', color: '#155724', fontWeight: 'bold'}}>Pagou: {formatarDataBR(t.dataPagAssessoria) || '-'}</span>
+                      </td>
+
                       <td style={{ ...tdStyle, fontWeight: 'bold' }}>CT: {t.contrato || '-'}<br/><span style={{fontSize: '12px', fontWeight: 'normal'}}>OS: {t.os || '-'}</span></td>
                       <td style={tdStyle}>R$ {Number(t.valorAssessoria).toFixed(2)}</td>
                       <td style={tdStyle}>{t.percAplicado}%</td>
@@ -156,21 +179,29 @@ function Relatorio() {
     <div style={{ padding: '40px', backgroundColor: '#f0f2f5', minHeight: '100vh' }}>
       <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', maxWidth: '1200px', margin: '0 auto' }}>
         <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', gap: '15px', flexWrap: 'wrap' }}>
-          <h2 style={{ color: '#333', margin: 0 }}>📊 Relatório de Comissões</h2>
+          
+          <div>
+            <h2 style={{ color: '#333', margin: 0 }}>📊 Comissões a Pagar</h2>
+            <p style={{ margin: '5px 0 0 0', color: '#666', fontSize: '14px' }}>Baseado na data em que o cliente efetuou o pagamento.</p>
+          </div>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#f8f9fa', padding: '8px 15px', borderRadius: '8px', border: '1px solid #ddd' }}>
-            <label style={{ fontWeight: 'bold', color: '#555' }}>Mês Referência:</label>
+            <label style={{ fontWeight: 'bold', color: '#555' }}>Mês do Pagamento:</label>
             <select value={mesFiltro} onChange={(e) => setMesFiltro(e.target.value)} style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '16px' }}>
               <option value={1}>Janeiro</option><option value={2}>Fevereiro</option><option value={3}>Março</option><option value={4}>Abril</option><option value={5}>Maio</option><option value={6}>Junho</option><option value={7}>Julho</option><option value={8}>Agosto</option><option value={9}>Setembro</option><option value={10}>Outubro</option><option value={11}>Novembro</option><option value={12}>Dezembro</option>
             </select>
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
             <button onClick={exportarExcelComissoes} style={btnExcel}>📊 Excel Comissões</button>
-            <button onClick={window.print} style={btnPdf}>📄 Imprimir</button>
+            <button onClick={window.print} style={btnPdf}>📄 Imprimir PDF</button>
             <Link to="/painel" style={btnVoltar}>⬅ Voltar</Link>
           </div>
         </div>
         {Object.keys(vendasDiretas).length === 0 && Object.keys(representantes).length === 0 && Object.keys(encarregadas).length === 0 ? (
-          <p style={{textAlign: 'center', color: '#888'}}>Não há comissões pagas neste mês.</p>
+          <div style={{textAlign: 'center', padding: '40px', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px dashed #ccc'}}>
+            <p style={{color: '#666', fontSize: '16px', margin: 0}}>Nenhuma comissão confirmada para este mês.</p>
+            <p style={{color: '#999', fontSize: '13px', marginTop: '5px'}}>Lembre-se: os contratos só aparecem aqui quando o status é marcado como "Pago" no Painel.</p>
+          </div>
         ) : (
           <>
             {renderTabela('🟢 Comissões de Vendas Diretas', '#28a745', vendasDiretas, false)}
@@ -186,7 +217,7 @@ function Relatorio() {
 const btnPdf = { padding: '10px 15px', backgroundColor: '#17a2b8', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' };
 const btnExcel = { padding: '10px 15px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' };
 const btnVoltar = { padding: '10px 15px', backgroundColor: '#6c757d', color: 'white', textDecoration: 'none', borderRadius: '4px', fontWeight: 'bold' };
-const thStyle = { padding: '10px', textAlign: 'center', border: '1px solid #000', fontSize: '14px' };
-const tdStyle = { padding: '10px', textAlign: 'center', border: '1px solid #000', fontSize: '14px' };
+const thStyle = { padding: '10px', textAlign: 'left', border: '1px solid #000', fontSize: '13px' };
+const tdStyle = { padding: '10px', textAlign: 'left', border: '1px solid #000', fontSize: '13px' };
 
 export default Relatorio;
