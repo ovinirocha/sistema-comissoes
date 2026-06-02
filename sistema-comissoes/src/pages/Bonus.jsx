@@ -56,9 +56,8 @@ function Bonus() {
 
         const formasAceitas = ['Cartão de Crédito', 'Cartão de Débito', 'Cartão Recorrente', 'Pix', 'Boleto'];
 
-        if (formasAceitas.includes(forma)) {
+        if (formasAceitas.includes(forma) && pBonus > 0) {
           
-          // MÁGICA ATUALIZADA: IDENTIFICA SE PAGOU SÓ A TAXA
           let msgStatus = 'PAGO';
           if (c.statusAssessoria !== 'Pago') {
               if (c.statusTaxaFederal === 'Pago') {
@@ -93,61 +92,71 @@ function Bonus() {
     if (Object.keys(bonusPagamento).length > 0) {
       const sheet = workbook.addWorksheet('Bônus Especiais');
 
-      sheet.columns = [
-        { header: 'VENDEDOR(A)', key: 'nome', width: 25 },
-        { header: 'MARCA', key: 'marca', width: 30 },
-        { header: 'SITUAÇÃO / CONTRATO', key: 'situacao', width: 25 },
-        { header: 'FORMA PAGAMENTO', key: 'forma', width: 25 },
-        { header: 'FECHADO EM', key: 'fechou', width: 15 },
-        { header: 'PAGO EM', key: 'pagou', width: 15 },
-        { header: 'VALOR BASE', key: 'base', width: 15 },
-        { header: '% BÔNUS', key: 'perc', width: 15 },
-        { header: 'BÔNUS A PAGAR', key: 'comissao', width: 20 }
-      ];
-
-      const headerRow = sheet.getRow(1);
-      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFD7E14' } }; 
-      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      sheet.getColumn(1).width = 30; // MARCA
+      sheet.getColumn(2).width = 20; // CONTRATO
+      sheet.getColumn(3).width = 15; // OS
+      sheet.getColumn(4).width = 25; // FORMA
+      sheet.getColumn(5).width = 20; // BASE
+      sheet.getColumn(6).width = 15; // %
+      sheet.getColumn(7).width = 25; // BONUS
 
       Object.entries(bonusPagamento).forEach(([nomePessoa, dados]) => {
+        // TÍTULO DO VENDEDOR MESCLADO
+        const tituloRow = sheet.addRow([`VENDEDOR(A): ${nomePessoa.toUpperCase()}`]);
+        sheet.mergeCells(tituloRow.number, 1, tituloRow.number, 7);
+        tituloRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 14 };
+        tituloRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFD7E14' } }; 
+        tituloRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
+        // CABEÇALHOS DAS COLUNAS
+        const headers = ['MARCA', 'Nº CONTRATO', 'Nº OS', 'FORMA PAGAMENTO', 'VALOR BASE', '% BÔNUS', 'BÔNUS A PAGAR'];
+        const headerRow = sheet.addRow(headers);
+        headerRow.font = { bold: true, color: { argb: 'FF333333' } };
+        headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8F9FA' } };
+
         dados.transacoes.forEach((t) => {
-          const linhaDado = {
-            nome: nomePessoa,
-            marca: t.marca,
-            forma: t.formaPagAssessoria,
-            fechou: t.dataFechamento ? formatarDataBR(t.dataFechamento) : 'Sem Data'
-          };
+          let rowData = [t.marca || '-'];
 
           if (t.aviso === 'PAGO') {
-            linhaDado.situacao = t.contrato || '-';
-            linhaDado.pagou = t.dataPagAssessoria ? formatarDataBR(t.dataPagAssessoria) : '-';
-            linhaDado.base = Number(t.valorAssessoria);
-            linhaDado.perc = t.percAplicado + '%';
-            linhaDado.comissao = Number(t.valorRecebido);
+            rowData.push(t.contrato || '-');
+            rowData.push(t.os || '-'); // Sai a data, entra a OS
+            rowData.push(t.formaPagAssessoria || '-');
+            rowData.push(Number(t.valorAssessoria));
+            rowData.push(`${t.percAplicado}%`);
+            rowData.push(Number(t.valorRecebido));
           } else {
-            linhaDado.situacao = t.aviso;
-            linhaDado.pagou = '-';
-            linhaDado.base = '-';
-            linhaDado.perc = '-';
-            linhaDado.comissao = 0;
+            rowData.push(t.aviso);
+            rowData.push(t.os || '-');
+            rowData.push(t.formaPagAssessoria || '-');
+            rowData.push('-');
+            rowData.push('-');
+            rowData.push(0);
           }
 
-          const row = sheet.addRow(linhaDado);
-
+          const row = sheet.addRow(rowData);
           if (t.aviso !== 'PAGO') {
-            // COLORE O EXCEL DE LARANJA SE FOR TAXA E VERMELHO SE FOR EM ABERTO
-            row.getCell('situacao').font = { 
-              bold: true, 
-              color: { argb: t.aviso === 'EM ABERTO' ? 'FFDC3545' : 'FFFD7E14' } 
-            };
+            row.getCell(2).font = { bold: true, color: { argb: t.aviso === 'EM ABERTO' ? 'FFDC3545' : 'FFFD7E14' } };
           } else {
-            row.getCell('base').numFmt = '"R$" #,##0.00';
-            row.getCell('comissao').numFmt = '"R$" #,##0.00';
-            row.getCell('comissao').font = { bold: true, color: { argb: 'FF28A745' } }; 
+            row.getCell(5).numFmt = '"R$" #,##0.00';
+            row.getCell(7).numFmt = '"R$" #,##0.00';
+            row.getCell(7).font = { bold: true, color: { argb: 'FF28A745' } };
           }
         });
-        sheet.addRow({}); 
+
+        // LINHA DE TOTAL
+        const totalRow = sheet.addRow([]);
+        
+        const cellTexto = totalRow.getCell(6);
+        cellTexto.value = 'TOTAL DE BÔNUS:';
+        cellTexto.font = { bold: true, color: { argb: 'FFFD7E14' } };
+        cellTexto.alignment = { horizontal: 'right' };
+
+        const cellValor = totalRow.getCell(7);
+        cellValor.value = Number(dados.total);
+        cellValor.numFmt = '"R$" #,##0.00';
+        cellValor.font = { bold: true, color: { argb: 'FFFD7E14' } };
+
+        sheet.addRow([]);
       });
     } else {
       alert("Nenhum bônus encontrado para este mês.");
@@ -203,7 +212,6 @@ function Bonus() {
                             <strong>{t.marca}</strong><br/>
                             <span style={{fontSize: '11px', color: '#64748b'}}>Fechou: {formatarDataBR(t.dataFechamento) || '-'}</span>
                           </td>
-                          {/* COLORE A FONTE BASEADO NA MENSAGEM */}
                           <td colSpan="5" style={{...tdStyle, textAlign: 'center', fontWeight: 'bold', letterSpacing: '1px', color: t.aviso === 'EM ABERTO' ? '#dc3545' : '#fd7e14', whiteSpace: 'nowrap'}}>
                             {t.aviso}
                           </td>
@@ -253,7 +261,7 @@ function Bonus() {
         
         {Object.keys(bonusPagamento).length === 0 ? (
           <div style={{textAlign: 'center', padding: '40px', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px dashed #ccc'}}>
-            <p style={{color: '#666', fontSize: '16px', margin: 0}}>Nenhum bônus especial encontrado para este mês.</p>
+            <p style={{color: '#666', fontSize: '16px', margin: 0}}>Nenhum bônus especial lançado e aplicado para este mês.</p>
           </div>
         ) : (
           renderTabelaBonus('🟠 Comissões de Bônus (Pix/Boleto/Cartão)', '#fd7e14', bonusPagamento)

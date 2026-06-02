@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Link } from 'react-router-dom';
-// SAEM AS IMPORTAÇÕES ANTIGAS E ENTRAM AS NOVAS MÁGICAS
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 
@@ -10,6 +9,7 @@ function Relatorio() {
   const [vendasDiretas, setVendasDiretas] = useState({});
   const [representantes, setRepresentantes] = useState({});
   const [encarregadas, setEncarregadas] = useState({});
+  const [bonusPagamento, setBonusPagamento] = useState({}); 
   const [mesFiltro, setMesFiltro] = useState(new Date().getMonth() + 1);
 
   const formatarDataBR = (dataString) => {
@@ -28,6 +28,7 @@ function Relatorio() {
       const gruposVendaDireta = {};
       const gruposRepresentante = {};
       const gruposEncarregada = {};
+      const gruposBonus = {};
 
       const inicializarPessoa = (grupo, nome) => {
         if (!grupo[nome]) grupo[nome] = { transacoes: [], total: 0 };
@@ -62,6 +63,8 @@ function Relatorio() {
         const pVenda = Number(c.perVendaDireta) || 0;
         const pRep = Number(c.perRepresentante) || 0;
         const pEnc = Number(c.perEncarregada) || 0;
+        const pBonus = Number(c.perBonusPagamento) || 0;
+        const forma = c.formaPagAssessoria || '';
 
         let msgStatus = 'PAGO';
         if (c.statusAssessoria !== 'Pago') {
@@ -90,99 +93,179 @@ function Relatorio() {
           gruposEncarregada[encarregada].transacoes.push({ ...c, tipo: `Da equipe de: ${vendedor}`, percAplicado: pEnc, valorRecebido: ganhoEnc, aviso: msgStatus });
           gruposEncarregada[encarregada].total += ganhoEnc;
         }
+
+        const formasAceitas = ['Cartão de Crédito', 'Cartão de Débito', 'Cartão Recorrente', 'Pix', 'Boleto'];
+        if (formasAceitas.includes(forma) && pBonus > 0) {
+          inicializarPessoa(gruposBonus, vendedor);
+          const ganhoBonus = msgStatus === 'PAGO' ? valorBase * (pBonus / 100) : 0;
+          gruposBonus[vendedor].transacoes.push({ ...c, aviso: msgStatus, percAplicado: pBonus, valorRecebido: ganhoBonus });
+          gruposBonus[vendedor].total += ganhoBonus;
+        }
       });
 
       setVendasDiretas(gruposVendaDireta);
       setRepresentantes(gruposRepresentante);
       setEncarregadas(gruposEncarregada);
+      setBonusPagamento(gruposBonus); // O estado continua existindo para alimentar o Excel!
     });
 
     return () => unsubscribe();
   }, [mesFiltro]);
 
-  // A NOVA FUNÇÃO DE EXPORTAÇÃO COM DESIGN PROFISSIONAL
   const exportarExcelComissoes = async () => {
     const workbook = new ExcelJS.Workbook();
 
-    const criarAba = (nomeAba, corHex, dadosAgrupados, tipoLideranca = null) => {
+    const criarAba = (nomeAba, corHex, dadosAgrupados, isLideranca = false) => {
       if (Object.keys(dadosAgrupados).length === 0) return;
       const sheet = workbook.addWorksheet(nomeAba);
 
-      // 1. Configurar o tamanho das colunas
-      const colunas = [
-        { header: tipoLideranca || 'VENDEDOR(A)', key: 'nome', width: 25 }
-      ];
-      if (tipoLideranca) {
-        colunas.push({ header: 'VENDA DE', key: 'vendedorReal', width: 25 });
-      }
-      colunas.push(
-        { header: 'MARCA', key: 'marca', width: 30 },
-        { header: 'SITUAÇÃO / CONTRATO', key: 'situacao', width: 25 },
-        { header: 'FECHADO EM', key: 'fechou', width: 15 },
-        { header: 'PAGO EM', key: 'pagou', width: 15 },
-        { header: 'VALOR BASE', key: 'base', width: 15 },
-        { header: '% APLICADA', key: 'perc', width: 15 },
-        { header: 'COMISSÃO A PAGAR', key: 'comissao', width: 20 }
-      );
-      sheet.columns = colunas;
+      let colIndex = 1;
+      if (isLideranca) sheet.getColumn(colIndex++).width = 25; 
+      sheet.getColumn(colIndex++).width = 30; 
+      sheet.getColumn(colIndex++).width = 20; 
+      sheet.getColumn(colIndex++).width = 15; 
+      sheet.getColumn(colIndex++).width = 20; 
+      sheet.getColumn(colIndex++).width = 15; 
+      sheet.getColumn(colIndex++).width = 25; 
 
-      // 2. Pintar o Cabeçalho
-      const headerRow = sheet.getRow(1);
-      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } }; // Fonte Branca
-      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: corHex.replace('#', 'FF') } }; // Cor Dinâmica
-      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
-
-      // 3. Preencher os Dados
       Object.entries(dadosAgrupados).forEach(([nomePessoa, dados]) => {
+        const tituloRow = sheet.addRow([`${isLideranca ? 'LÍDER' : 'VENDEDOR(A)'}: ${nomePessoa.toUpperCase()}`]);
+        const lastCol = isLideranca ? 7 : 6;
+        sheet.mergeCells(tituloRow.number, 1, tituloRow.number, lastCol);
+        tituloRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 14 };
+        tituloRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: corHex.replace('#', 'FF') } };
+        tituloRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
+        const headers = isLideranca
+          ? ['VENDA DE', 'MARCA', 'Nº CONTRATO', 'Nº OS', 'VALOR BASE', '% APLICADA', 'COMISSÃO A PAGAR']
+          : ['MARCA', 'Nº CONTRATO', 'Nº OS', 'VALOR BASE', '% APLICADA', 'COMISSÃO A PAGAR'];
+        const headerRow = sheet.addRow(headers);
+        headerRow.font = { bold: true, color: { argb: 'FF333333' } };
+        headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8F9FA' } };
+
         dados.transacoes.forEach((t) => {
-          const linhaDado = {
-            nome: nomePessoa,
-            ...(tipoLideranca ? { vendedorReal: t.vendedor } : {}),
-            marca: t.marca,
-            fechou: t.dataFechamento ? formatarDataBR(t.dataFechamento) : 'Sem Data'
-          };
+          let rowData = [];
+          if (isLideranca) rowData.push(t.vendedor || '-');
+          
+          rowData.push(t.marca || '-');
 
           if (t.aviso === 'PAGO') {
-            linhaDado.situacao = t.contrato || '-';
-            linhaDado.pagou = t.dataPagAssessoria ? formatarDataBR(t.dataPagAssessoria) : '-';
-            linhaDado.base = Number(t.valorAssessoria);
-            linhaDado.perc = t.percAplicado + '%';
-            linhaDado.comissao = Number(t.valorRecebido);
+            rowData.push(t.contrato || '-');
+            rowData.push(t.os || '-'); 
+            rowData.push(Number(t.valorAssessoria));
+            rowData.push(`${t.percAplicado}%`);
+            rowData.push(Number(t.valorRecebido));
           } else {
-            linhaDado.situacao = t.aviso;
-            linhaDado.pagou = '-';
-            linhaDado.base = '-';
-            linhaDado.perc = '-';
-            linhaDado.comissao = 0;
+            rowData.push(t.aviso);
+            rowData.push(t.os || '-');
+            rowData.push('-');
+            rowData.push('-');
+            rowData.push(0);
           }
 
-          const row = sheet.addRow(linhaDado);
+          const row = sheet.addRow(rowData);
+          const colOffset = isLideranca ? 1 : 0;
 
-          // 4. Formatações Especiais nas Linhas
           if (t.aviso !== 'PAGO') {
-            // Pinta a palavra EM ABERTO de vermelho ou PAGOU SÓ TAXA de laranja
-            row.getCell('situacao').font = { 
-              bold: true, 
-              color: { argb: t.aviso === 'EM ABERTO' ? 'FFDC3545' : 'FFFD7E14' } 
-            };
+            row.getCell(2 + colOffset).font = { bold: true, color: { argb: t.aviso === 'EM ABERTO' ? 'FFDC3545' : 'FFFD7E14' } };
           } else {
-            // Formata os números como Moeda (R$)
-            row.getCell('base').numFmt = '"R$" #,##0.00';
-            row.getCell('comissao').numFmt = '"R$" #,##0.00';
-            row.getCell('comissao').font = { bold: true, color: { argb: 'FF28A745' } }; // Comissão em Verde
+            row.getCell(4 + colOffset).numFmt = '"R$" #,##0.00';
+            row.getCell(6 + colOffset).numFmt = '"R$" #,##0.00';
+            row.getCell(6 + colOffset).font = { bold: true, color: { argb: 'FF28A745' } };
           }
         });
+
+        const totalRow = sheet.addRow([]);
+        const colOffset = isLideranca ? 1 : 0;
         
-        // Pula uma linha em branco entre um vendedor e outro para ficar organizado
-        sheet.addRow({}); 
+        const cellTexto = totalRow.getCell(5 + colOffset);
+        cellTexto.value = 'TOTAL A RECEBER:';
+        cellTexto.font = { bold: true, color: { argb: 'FF28A745' } };
+        cellTexto.alignment = { horizontal: 'right' };
+
+        const cellValor = totalRow.getCell(6 + colOffset);
+        cellValor.value = Number(dados.total);
+        cellValor.numFmt = '"R$" #,##0.00';
+        cellValor.font = { bold: true, color: { argb: 'FF28A745' } };
+
+        sheet.addRow([]);
       });
     };
 
-    criarAba('Vendas Diretas', '#28a745', vendasDiretas, null);
-    criarAba('Representantes', '#007bff', representantes, 'REPRESENTANTE');
-    criarAba('Encarregadas', '#6f42c1', encarregadas, 'ENCARREGADA');
+    // A MÁGICA CONTINUA AQUI: O Excel puxa a aba de Bônus mesmo ela não aparecendo na tela!
+    const criarAbaBonus = (nomeAba, corHex, dadosAgrupados) => {
+      if (Object.keys(dadosAgrupados).length === 0) return;
+      const sheet = workbook.addWorksheet(nomeAba);
 
-    // Salvar o arquivo
+      sheet.getColumn(1).width = 30; 
+      sheet.getColumn(2).width = 20; 
+      sheet.getColumn(3).width = 15; 
+      sheet.getColumn(4).width = 25; 
+      sheet.getColumn(5).width = 20; 
+      sheet.getColumn(6).width = 15; 
+      sheet.getColumn(7).width = 25; 
+
+      Object.entries(dadosAgrupados).forEach(([nomePessoa, dados]) => {
+        const tituloRow = sheet.addRow([`VENDEDOR(A): ${nomePessoa.toUpperCase()}`]);
+        sheet.mergeCells(tituloRow.number, 1, tituloRow.number, 7);
+        tituloRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 14 };
+        tituloRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: corHex.replace('#', 'FF') } };
+        tituloRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
+        const headers = ['MARCA', 'Nº CONTRATO', 'Nº OS', 'FORMA PAGAMENTO', 'VALOR BASE', '% BÔNUS', 'BÔNUS A PAGAR'];
+        const headerRow = sheet.addRow(headers);
+        headerRow.font = { bold: true, color: { argb: 'FF333333' } };
+        headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8F9FA' } };
+
+        dados.transacoes.forEach((t) => {
+          let rowData = [t.marca || '-'];
+
+          if (t.aviso === 'PAGO') {
+            rowData.push(t.contrato || '-');
+            rowData.push(t.os || '-');
+            rowData.push(t.formaPagAssessoria || '-');
+            rowData.push(Number(t.valorAssessoria));
+            rowData.push(`${t.percAplicado}%`);
+            rowData.push(Number(t.valorRecebido));
+          } else {
+            rowData.push(t.aviso);
+            rowData.push(t.os || '-');
+            rowData.push(t.formaPagAssessoria || '-');
+            rowData.push('-');
+            rowData.push('-');
+            rowData.push(0);
+          }
+
+          const row = sheet.addRow(rowData);
+          if (t.aviso !== 'PAGO') {
+            row.getCell(2).font = { bold: true, color: { argb: t.aviso === 'EM ABERTO' ? 'FFDC3545' : 'FFFD7E14' } };
+          } else {
+            row.getCell(5).numFmt = '"R$" #,##0.00';
+            row.getCell(7).numFmt = '"R$" #,##0.00';
+            row.getCell(7).font = { bold: true, color: { argb: 'FF28A745' } };
+          }
+        });
+
+        const totalRow = sheet.addRow([]);
+        const cellTexto = totalRow.getCell(6);
+        cellTexto.value = 'TOTAL DE BÔNUS:';
+        cellTexto.font = { bold: true, color: { argb: 'FFFD7E14' } };
+        cellTexto.alignment = { horizontal: 'right' };
+
+        const cellValor = totalRow.getCell(7);
+        cellValor.value = Number(dados.total);
+        cellValor.numFmt = '"R$" #,##0.00';
+        cellValor.font = { bold: true, color: { argb: 'FFFD7E14' } };
+
+        sheet.addRow([]);
+      });
+    };
+
+    criarAba('Comissões', '#28a745', vendasDiretas, false);
+    criarAba('Representantes', '#007bff', representantes, true);
+    criarAba('Encarregadas', '#6f42c1', encarregadas, true);
+    criarAbaBonus('Bônus Cartão', '#fd7e14', bonusPagamento);
+
     const buffer = await workbook.xlsx.writeBuffer();
     saveAs(new Blob([buffer]), `Comissoes_Mes_${mesFiltro}.xlsx`);
   };

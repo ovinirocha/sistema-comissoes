@@ -274,7 +274,7 @@ function Painel() {
               <button type="button" onClick={handleAdicionarVendedor} style={btnAmarelo}>👥 Cadastros</button>
             )}
             {isFinanceiro && (
-              <Link to="/geral" style={btnLaranja}>📋 Planilha Geral</Link>
+              <Link to="/geral" style={btnGeral}>📋 Planilha Geral</Link>
             )}
             {isFinanceiro && (
               <Link to="/relatorio" style={btnAzul}>📊 Comissões</Link>
@@ -523,7 +523,7 @@ const thStyle = { padding: '12px', textAlign: 'left', color: '#555', whiteSpace:
 const tdStyle = { padding: '12px', color: '#333' };
 const cardStyle = { flex: '1 1 250px', backgroundColor: 'white', padding: '20px', borderRadius: '8px', textAlign: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' };
 const btnAmarelo = { padding: '10px 15px', backgroundColor: '#ffc107', color: '#333', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' };
-const btnLaranja = { padding: '10px 15px', backgroundColor: '#fd7e14', color: 'white', textDecoration: 'none', borderRadius: '4px', fontWeight: 'bold', display: 'flex', alignItems: 'center' };
+const btnGeral = { padding: '10px 15px', backgroundColor: '#6366f1', color: 'white', textDecoration: 'none', borderRadius: '4px', fontWeight: 'bold', display: 'flex', alignItems: 'center' };
 const btnAzul = { padding: '10px 15px', backgroundColor: '#007bff', color: 'white', textDecoration: 'none', borderRadius: '4px', fontWeight: 'bold', display: 'flex', alignItems: 'center' };
 const btnBonus = { padding: '10px 15px', backgroundColor: '#fd7e14', color: 'white', textDecoration: 'none', borderRadius: '4px', fontWeight: 'bold', display: 'flex', alignItems: 'center' };
 const btnVermelho = { padding: '10px 15px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' };
