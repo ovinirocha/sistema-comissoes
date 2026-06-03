@@ -10,6 +10,7 @@ function Relatorio() {
   const [representantes, setRepresentantes] = useState({});
   const [encarregadas, setEncarregadas] = useState({});
   const [bonusPagamento, setBonusPagamento] = useState({}); 
+  const [bonusGerencia, setBonusGerencia] = useState({}); 
   const [mesFiltro, setMesFiltro] = useState(new Date().getMonth() + 1);
 
   const formatarDataBR = (dataString) => {
@@ -29,6 +30,7 @@ function Relatorio() {
       const gruposRepresentante = {};
       const gruposEncarregada = {};
       const gruposBonus = {};
+      const gruposBonusGerencia = {};
 
       const inicializarPessoa = (grupo, nome) => {
         if (!grupo[nome]) grupo[nome] = { transacoes: [], total: 0 };
@@ -94,19 +96,34 @@ function Relatorio() {
           gruposEncarregada[encarregada].total += ganhoEnc;
         }
 
+        // BÔNUS INVISÍVEL PARA EXPORTAÇÃO
         const formasAceitas = ['Cartão de Crédito', 'Cartão de Débito', 'Cartão Recorrente', 'Pix', 'Boleto'];
         if (formasAceitas.includes(forma) && pBonus > 0) {
-          inicializarPessoa(gruposBonus, vendedor);
           const ganhoBonus = msgStatus === 'PAGO' ? valorBase * (pBonus / 100) : 0;
-          gruposBonus[vendedor].transacoes.push({ ...c, aviso: msgStatus, percAplicado: pBonus, valorRecebido: ganhoBonus });
-          gruposBonus[vendedor].total += ganhoBonus;
+          
+          if (encarregada && vendedor === encarregada) {
+            inicializarPessoa(gruposBonusGerencia, encarregada);
+            gruposBonusGerencia[encarregada].transacoes.push({ ...c, aviso: msgStatus, percAplicado: pBonus, valorRecebido: ganhoBonus, vendedorOrigem: vendedor });
+            gruposBonusGerencia[encarregada].total += ganhoBonus;
+          } else {
+            inicializarPessoa(gruposBonus, vendedor);
+            gruposBonus[vendedor].transacoes.push({ ...c, aviso: msgStatus, percAplicado: pBonus, valorRecebido: ganhoBonus });
+            gruposBonus[vendedor].total += ganhoBonus;
+
+            if (encarregada) {
+              inicializarPessoa(gruposBonusGerencia, encarregada);
+              gruposBonusGerencia[encarregada].transacoes.push({ ...c, aviso: msgStatus, percAplicado: pBonus, valorRecebido: ganhoBonus, vendedorOrigem: vendedor });
+              gruposBonusGerencia[encarregada].total += ganhoBonus;
+            }
+          }
         }
       });
 
       setVendasDiretas(gruposVendaDireta);
       setRepresentantes(gruposRepresentante);
       setEncarregadas(gruposEncarregada);
-      setBonusPagamento(gruposBonus); // O estado continua existindo para alimentar o Excel!
+      setBonusPagamento(gruposBonus); 
+      setBonusGerencia(gruposBonusGerencia);
     });
 
     return () => unsubscribe();
@@ -192,33 +209,41 @@ function Relatorio() {
       });
     };
 
-    // A MÁGICA CONTINUA AQUI: O Excel puxa a aba de Bônus mesmo ela não aparecendo na tela!
-    const criarAbaBonus = (nomeAba, corHex, dadosAgrupados) => {
+    const criarAbaBonus = (nomeAba, corHex, dadosAgrupados, isLideranca = false) => {
       if (Object.keys(dadosAgrupados).length === 0) return;
       const sheet = workbook.addWorksheet(nomeAba);
 
-      sheet.getColumn(1).width = 30; 
-      sheet.getColumn(2).width = 20; 
-      sheet.getColumn(3).width = 15; 
-      sheet.getColumn(4).width = 25; 
-      sheet.getColumn(5).width = 20; 
-      sheet.getColumn(6).width = 15; 
-      sheet.getColumn(7).width = 25; 
+      let colIndex = 1;
+      if (isLideranca) sheet.getColumn(colIndex++).width = 25; 
+      sheet.getColumn(colIndex++).width = 30; 
+      sheet.getColumn(colIndex++).width = 20; 
+      sheet.getColumn(colIndex++).width = 15; 
+      sheet.getColumn(colIndex++).width = 25; 
+      sheet.getColumn(colIndex++).width = 20; 
+      sheet.getColumn(colIndex++).width = 15; 
+      sheet.getColumn(colIndex++).width = 25; 
 
       Object.entries(dadosAgrupados).forEach(([nomePessoa, dados]) => {
-        const tituloRow = sheet.addRow([`VENDEDOR(A): ${nomePessoa.toUpperCase()}`]);
-        sheet.mergeCells(tituloRow.number, 1, tituloRow.number, 7);
+        const tituloRow = sheet.addRow([`${isLideranca ? 'GERENTE/ENCARREGADA' : 'VENDEDOR(A)'}: ${nomePessoa.toUpperCase()}`]);
+        const lastCol = isLideranca ? 8 : 7;
+        sheet.mergeCells(tituloRow.number, 1, tituloRow.number, lastCol);
         tituloRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 14 };
         tituloRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: corHex.replace('#', 'FF') } };
         tituloRow.alignment = { vertical: 'middle', horizontal: 'center' };
 
-        const headers = ['MARCA', 'Nº CONTRATO', 'Nº OS', 'FORMA PAGAMENTO', 'VALOR BASE', '% BÔNUS', 'BÔNUS A PAGAR'];
+        const headers = isLideranca 
+          ? ['VENDA DE', 'MARCA', 'Nº CONTRATO', 'Nº OS', 'FORMA PAGAMENTO', 'VALOR BASE', '% BÔNUS', 'BÔNUS A PAGAR']
+          : ['MARCA', 'Nº CONTRATO', 'Nº OS', 'FORMA PAGAMENTO', 'VALOR BASE', '% BÔNUS', 'BÔNUS A PAGAR'];
+        
         const headerRow = sheet.addRow(headers);
         headerRow.font = { bold: true, color: { argb: 'FF333333' } };
         headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8F9FA' } };
 
         dados.transacoes.forEach((t) => {
-          let rowData = [t.marca || '-'];
+          let rowData = [];
+          if (isLideranca) rowData.push(t.vendedorOrigem || '-');
+
+          rowData.push(t.marca || '-');
 
           if (t.aviso === 'PAGO') {
             rowData.push(t.contrato || '-');
@@ -237,25 +262,29 @@ function Relatorio() {
           }
 
           const row = sheet.addRow(rowData);
+          const colOffset = isLideranca ? 1 : 0;
+
           if (t.aviso !== 'PAGO') {
-            row.getCell(2).font = { bold: true, color: { argb: t.aviso === 'EM ABERTO' ? 'FFDC3545' : 'FFFD7E14' } };
+            row.getCell(2 + colOffset).font = { bold: true, color: { argb: t.aviso === 'EM ABERTO' ? 'FFDC3545' : 'FFFD7E14' } };
           } else {
-            row.getCell(5).numFmt = '"R$" #,##0.00';
-            row.getCell(7).numFmt = '"R$" #,##0.00';
-            row.getCell(7).font = { bold: true, color: { argb: 'FF28A745' } };
+            row.getCell(5 + colOffset).numFmt = '"R$" #,##0.00';
+            row.getCell(7 + colOffset).numFmt = '"R$" #,##0.00';
+            row.getCell(7 + colOffset).font = { bold: true, color: { argb: 'FF28A745' } };
           }
         });
 
         const totalRow = sheet.addRow([]);
-        const cellTexto = totalRow.getCell(6);
+        const colOffset = isLideranca ? 1 : 0;
+        
+        const cellTexto = totalRow.getCell(6 + colOffset);
         cellTexto.value = 'TOTAL DE BÔNUS:';
-        cellTexto.font = { bold: true, color: { argb: 'FFFD7E14' } };
+        cellTexto.font = { bold: true, color: { argb: corHex.replace('#', 'FF') } };
         cellTexto.alignment = { horizontal: 'right' };
 
-        const cellValor = totalRow.getCell(7);
+        const cellValor = totalRow.getCell(7 + colOffset);
         cellValor.value = Number(dados.total);
         cellValor.numFmt = '"R$" #,##0.00';
-        cellValor.font = { bold: true, color: { argb: 'FFFD7E14' } };
+        cellValor.font = { bold: true, color: { argb: corHex.replace('#', 'FF') } };
 
         sheet.addRow([]);
       });
@@ -264,7 +293,8 @@ function Relatorio() {
     criarAba('Comissões', '#28a745', vendasDiretas, false);
     criarAba('Representantes', '#007bff', representantes, true);
     criarAba('Encarregadas', '#6f42c1', encarregadas, true);
-    criarAbaBonus('Bônus Cartão', '#fd7e14', bonusPagamento);
+    criarAbaBonus('Bônus Cartão Vendedor', '#fd7e14', bonusPagamento, false);
+    criarAbaBonus('Bônus Cartão Marcia', '#6f42c1', bonusGerencia, true);
 
     const buffer = await workbook.xlsx.writeBuffer();
     saveAs(new Blob([buffer]), `Comissoes_Mes_${mesFiltro}.xlsx`);

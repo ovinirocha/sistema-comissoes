@@ -7,6 +7,7 @@ import { saveAs } from 'file-saver';
 
 function Bonus() {
   const [bonusPagamento, setBonusPagamento] = useState({});
+  const [bonusGerencia, setBonusGerencia] = useState({}); 
   const [mesFiltro, setMesFiltro] = useState(new Date().getMonth() + 1);
 
   const formatarDataBR = (dataString) => {
@@ -23,6 +24,7 @@ function Bonus() {
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const gruposBonus = {};
+      const gruposBonusGerencia = {};
 
       const inicializarPessoa = (grupo, nome) => {
         if (!grupo[nome]) grupo[nome] = { transacoes: [], total: 0 };
@@ -51,12 +53,14 @@ function Bonus() {
         const c = doc.data();
         const vendedor = c.vendedor || 'Desconhecido';
         const valorBase = Number(c.valorAssessoria) || 0;
+        
         const pBonus = Number(c.perBonusPagamento) || 0; 
+        const gerente = c.encarregada || '';
+        
         const forma = c.formaPagAssessoria || '';
-
         const formasAceitas = ['Cartão de Crédito', 'Cartão de Débito', 'Cartão Recorrente', 'Pix', 'Boleto'];
 
-        if (formasAceitas.includes(forma) && pBonus > 0) {
+        if (formasAceitas.includes(forma)) {
           
           let msgStatus = 'PAGO';
           if (c.statusAssessoria !== 'Pago') {
@@ -67,20 +71,51 @@ function Bonus() {
               }
           }
 
-          const valorGanho = msgStatus === 'PAGO' ? valorBase * (pBonus / 100) : 0;
+          if (pBonus > 0) {
+            const valorGanho = msgStatus === 'PAGO' ? valorBase * (pBonus / 100) : 0;
+            
+            // INTELIGÊNCIA ANTI-DUPLICAÇÃO:
+            // Se o vendedor for a mesma pessoa que a gerente, lança só na tabela de Gerência!
+            if (gerente && vendedor === gerente) {
+              inicializarPessoa(gruposBonusGerencia, gerente);
+              gruposBonusGerencia[gerente].transacoes.push({ 
+                ...c, 
+                aviso: msgStatus, 
+                percAplicado: pBonus, 
+                valorRecebido: valorGanho,
+                vendedorOrigem: vendedor 
+              });
+              gruposBonusGerencia[gerente].total += valorGanho;
+            } else {
+              // 1. Lança pro Vendedor normal
+              inicializarPessoa(gruposBonus, vendedor);
+              gruposBonus[vendedor].transacoes.push({ 
+                ...c, 
+                aviso: msgStatus, 
+                percAplicado: pBonus, 
+                valorRecebido: valorGanho 
+              });
+              gruposBonus[vendedor].total += valorGanho;
 
-          inicializarPessoa(gruposBonus, vendedor);
-          gruposBonus[vendedor].transacoes.push({ 
-            ...c, 
-            aviso: msgStatus, 
-            percAplicado: pBonus, 
-            valorRecebido: valorGanho 
-          });
-          gruposBonus[vendedor].total += valorGanho;
+              // 2. E lança pra Gerente (já que são pessoas diferentes)
+              if (gerente) {
+                inicializarPessoa(gruposBonusGerencia, gerente);
+                gruposBonusGerencia[gerente].transacoes.push({ 
+                  ...c, 
+                  aviso: msgStatus, 
+                  percAplicado: pBonus, 
+                  valorRecebido: valorGanho,
+                  vendedorOrigem: vendedor 
+                });
+                gruposBonusGerencia[gerente].total += valorGanho;
+              }
+            }
+          }
         }
       });
 
       setBonusPagamento(gruposBonus);
+      setBonusGerencia(gruposBonusGerencia);
     });
 
     return () => unsubscribe();
@@ -89,37 +124,45 @@ function Bonus() {
   const exportarExcelBonus = async () => {
     const workbook = new ExcelJS.Workbook();
 
-    if (Object.keys(bonusPagamento).length > 0) {
-      const sheet = workbook.addWorksheet('Bônus Especiais');
+    const criarAbaBonus = (nomeAba, corHex, dadosAgrupados, isLideranca = false) => {
+      if (Object.keys(dadosAgrupados).length === 0) return;
+      const sheet = workbook.addWorksheet(nomeAba);
 
-      sheet.getColumn(1).width = 30; // MARCA
-      sheet.getColumn(2).width = 20; // CONTRATO
-      sheet.getColumn(3).width = 15; // OS
-      sheet.getColumn(4).width = 25; // FORMA
-      sheet.getColumn(5).width = 20; // BASE
-      sheet.getColumn(6).width = 15; // %
-      sheet.getColumn(7).width = 25; // BONUS
+      let colIndex = 1;
+      if (isLideranca) sheet.getColumn(colIndex++).width = 25; 
+      sheet.getColumn(colIndex++).width = 30; 
+      sheet.getColumn(colIndex++).width = 20; 
+      sheet.getColumn(colIndex++).width = 15; 
+      sheet.getColumn(colIndex++).width = 25; 
+      sheet.getColumn(colIndex++).width = 20; 
+      sheet.getColumn(colIndex++).width = 15; 
+      sheet.getColumn(colIndex++).width = 25; 
 
-      Object.entries(bonusPagamento).forEach(([nomePessoa, dados]) => {
-        // TÍTULO DO VENDEDOR MESCLADO
-        const tituloRow = sheet.addRow([`VENDEDOR(A): ${nomePessoa.toUpperCase()}`]);
-        sheet.mergeCells(tituloRow.number, 1, tituloRow.number, 7);
+      Object.entries(dadosAgrupados).forEach(([nomePessoa, dados]) => {
+        const tituloRow = sheet.addRow([`${isLideranca ? 'GERENTE/ENCARREGADA' : 'VENDEDOR(A)'}: ${nomePessoa.toUpperCase()}`]);
+        const lastCol = isLideranca ? 8 : 7;
+        sheet.mergeCells(tituloRow.number, 1, tituloRow.number, lastCol);
         tituloRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 14 };
-        tituloRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFD7E14' } }; 
+        tituloRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: corHex.replace('#', 'FF') } }; 
         tituloRow.alignment = { vertical: 'middle', horizontal: 'center' };
 
-        // CABEÇALHOS DAS COLUNAS
-        const headers = ['MARCA', 'Nº CONTRATO', 'Nº OS', 'FORMA PAGAMENTO', 'VALOR BASE', '% BÔNUS', 'BÔNUS A PAGAR'];
+        const headers = isLideranca 
+          ? ['VENDA DE', 'MARCA', 'Nº CONTRATO', 'Nº OS', 'FORMA PAGAMENTO', 'VALOR BASE', '% BÔNUS', 'BÔNUS A PAGAR']
+          : ['MARCA', 'Nº CONTRATO', 'Nº OS', 'FORMA PAGAMENTO', 'VALOR BASE', '% BÔNUS', 'BÔNUS A PAGAR'];
+        
         const headerRow = sheet.addRow(headers);
         headerRow.font = { bold: true, color: { argb: 'FF333333' } };
         headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8F9FA' } };
 
         dados.transacoes.forEach((t) => {
-          let rowData = [t.marca || '-'];
+          let rowData = [];
+          if (isLideranca) rowData.push(t.vendedorOrigem || '-');
+
+          rowData.push(t.marca || '-');
 
           if (t.aviso === 'PAGO') {
             rowData.push(t.contrato || '-');
-            rowData.push(t.os || '-'); // Sai a data, entra a OS
+            rowData.push(t.os || '-'); 
             rowData.push(t.formaPagAssessoria || '-');
             rowData.push(Number(t.valorAssessoria));
             rowData.push(`${t.percAplicado}%`);
@@ -134,40 +177,47 @@ function Bonus() {
           }
 
           const row = sheet.addRow(rowData);
+          const colOffset = isLideranca ? 1 : 0;
+
           if (t.aviso !== 'PAGO') {
-            row.getCell(2).font = { bold: true, color: { argb: t.aviso === 'EM ABERTO' ? 'FFDC3545' : 'FFFD7E14' } };
+            row.getCell(2 + colOffset).font = { bold: true, color: { argb: t.aviso === 'EM ABERTO' ? 'FFDC3545' : 'FFFD7E14' } };
           } else {
-            row.getCell(5).numFmt = '"R$" #,##0.00';
-            row.getCell(7).numFmt = '"R$" #,##0.00';
-            row.getCell(7).font = { bold: true, color: { argb: 'FF28A745' } };
+            row.getCell(5 + colOffset).numFmt = '"R$" #,##0.00';
+            row.getCell(7 + colOffset).numFmt = '"R$" #,##0.00';
+            row.getCell(7 + colOffset).font = { bold: true, color: { argb: 'FF28A745' } };
           }
         });
 
-        // LINHA DE TOTAL
         const totalRow = sheet.addRow([]);
+        const colOffset = isLideranca ? 1 : 0;
         
-        const cellTexto = totalRow.getCell(6);
+        const cellTexto = totalRow.getCell(6 + colOffset);
         cellTexto.value = 'TOTAL DE BÔNUS:';
-        cellTexto.font = { bold: true, color: { argb: 'FFFD7E14' } };
+        cellTexto.font = { bold: true, color: { argb: corHex.replace('#', 'FF') } };
         cellTexto.alignment = { horizontal: 'right' };
 
-        const cellValor = totalRow.getCell(7);
+        const cellValor = totalRow.getCell(7 + colOffset);
         cellValor.value = Number(dados.total);
         cellValor.numFmt = '"R$" #,##0.00';
-        cellValor.font = { bold: true, color: { argb: 'FFFD7E14' } };
+        cellValor.font = { bold: true, color: { argb: corHex.replace('#', 'FF') } };
 
         sheet.addRow([]);
       });
-    } else {
+    };
+
+    if (Object.keys(bonusPagamento).length === 0 && Object.keys(bonusGerencia).length === 0) {
       alert("Nenhum bônus encontrado para este mês.");
       return;
     }
+
+    criarAbaBonus('Bônus Vendedor', '#fd7e14', bonusPagamento, false);
+    criarAbaBonus('Bônus Gerência', '#6f42c1', bonusGerencia, true); 
 
     const buffer = await workbook.xlsx.writeBuffer();
     saveAs(new Blob([buffer]), `Bonus_Pagamentos_Mes_${mesFiltro}.xlsx`);
   };
 
-  const renderTabelaBonus = (titulo, corBg, dadosAgrupados) => {
+  const renderTabelaBonus = (titulo, corBg, dadosAgrupados, isLideranca = false) => {
     if (Object.keys(dadosAgrupados).length === 0) return null;
     return (
       <div style={{ marginBottom: '50px' }}>
@@ -181,6 +231,7 @@ function Bonus() {
               <table className="tabela-print" style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', minWidth: '800px' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#f8f9fa' }}>
+                    {isLideranca && <th style={thStyle}>VENDA DE</th>}
                     <th style={thStyle}>MARCA / DATAS</th>
                     <th style={thStyle}>CONTRATO / OS</th>
                     <th style={thStyle}>FORMA DE PAGAMENTO</th>
@@ -192,6 +243,7 @@ function Bonus() {
                 <tbody>
                   {dados.transacoes.map((t, index) => (
                     <tr key={index} style={{ backgroundColor: t.aviso !== 'PAGO' ? '#fdf8f5' : 'transparent' }}>
+                      {isLideranca && <td style={{...tdStyle, color: '#666', fontStyle: 'italic'}}>{t.vendedorOrigem}</td>}
                       
                       {t.aviso === 'PAGO' ? (
                         <>
@@ -212,7 +264,7 @@ function Bonus() {
                             <strong>{t.marca}</strong><br/>
                             <span style={{fontSize: '11px', color: '#64748b'}}>Fechou: {formatarDataBR(t.dataFechamento) || '-'}</span>
                           </td>
-                          <td colSpan="5" style={{...tdStyle, textAlign: 'center', fontWeight: 'bold', letterSpacing: '1px', color: t.aviso === 'EM ABERTO' ? '#dc3545' : '#fd7e14', whiteSpace: 'nowrap'}}>
+                          <td colSpan={isLideranca ? "5" : "5"} style={{...tdStyle, textAlign: 'center', fontWeight: 'bold', letterSpacing: '1px', color: t.aviso === 'EM ABERTO' ? '#dc3545' : '#fd7e14', whiteSpace: 'nowrap'}}>
                             {t.aviso}
                           </td>
                         </>
@@ -224,7 +276,7 @@ function Bonus() {
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
               <div style={{ border: '1px solid #000', padding: '15px', borderRadius: '4px', backgroundColor: '#fafafa', width: '300px' }} className="print-total-box">
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#fd7e14', fontWeight: 'bold', fontSize: '18px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: corBg, fontWeight: 'bold', fontSize: '18px' }}>
                   <span>TOTAL DE BÔNUS:</span>
                   <span>R$ {dados.total.toFixed(2)}</span>
                 </div>
@@ -259,12 +311,15 @@ function Bonus() {
           </div>
         </div>
         
-        {Object.keys(bonusPagamento).length === 0 ? (
+        {Object.keys(bonusPagamento).length === 0 && Object.keys(bonusGerencia).length === 0 ? (
           <div style={{textAlign: 'center', padding: '40px', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px dashed #ccc'}}>
             <p style={{color: '#666', fontSize: '16px', margin: 0}}>Nenhum bônus especial lançado e aplicado para este mês.</p>
           </div>
         ) : (
-          renderTabelaBonus('🟠 Comissões de Bônus (Pix/Boleto/Cartão)', '#fd7e14', bonusPagamento)
+          <>
+            {renderTabelaBonus('🟠 Comissões de Bônus (Vendedor)', '#fd7e14', bonusPagamento, false)}
+            {renderTabelaBonus('🟣 Bônus Gerência / Encarregada', '#6f42c1', bonusGerencia, true)}
+          </>
         )}
       </div>
 

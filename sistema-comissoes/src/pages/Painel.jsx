@@ -38,7 +38,7 @@ function Painel() {
   const [dataPagTaxaFederal, setDataPagTaxaFederal] = useState('');
 
   const [perVendaDireta, setPerVendaDireta] = useState('');
-  const [perBonusPagamento, setPerBonusPagamento] = useState(''); // AGORA É PORCENTAGEM
+  const [perBonusPagamento, setPerBonusPagamento] = useState(''); 
   const [perRepresentante, setPerRepresentante] = useState('');
   const [representanteSelecionado, setRepresentanteSelecionado] = useState('');
   const [perEncarregada, setPerEncarregada] = useState('');
@@ -54,12 +54,10 @@ function Painel() {
   const emailLogado = auth.currentUser ? auth.currentUser.email : '';
   const isFinanceiro = emailLogado === 'financeiro@provincia.com'; 
 
-  // MÁGICA PARA MOSTRAR/ESCONDER O CAMPO DE BÔNUS
   const formasAceitasBonus = ['Cartão de Crédito', 'Cartão de Débito', 'Cartão Recorrente', 'Pix', 'Boleto'];
   const mostrarCampoBonus = formasAceitasBonus.includes(formaPagAssessoria);
 
   useEffect(() => {
-    // Se a pessoa mudar a forma de pagamento e não for aceita, zera o bônus
     if (!mostrarCampoBonus) {
       setPerBonusPagamento('');
     }
@@ -145,7 +143,7 @@ function Painel() {
         dataPagTaxaFederal: isFinanceiro ? dataPagTaxaFederal : '',
 
         perVendaDireta: isFinanceiro ? tratarNumero(perVendaDireta) : 0,
-        perBonusPagamento: isFinanceiro && mostrarCampoBonus ? tratarNumero(perBonusPagamento) : 0, // SALVA A NOVA PORCENTAGEM
+        perBonusPagamento: isFinanceiro && mostrarCampoBonus ? tratarNumero(perBonusPagamento) : 0,
         perRepresentante: isFinanceiro ? tratarNumero(perRepresentante) : 0,
         representante: isFinanceiro ? representanteSelecionado : '',
         perEncarregada: isFinanceiro ? tratarNumero(perEncarregada) : 0,
@@ -191,7 +189,7 @@ function Painel() {
     setDataPagTaxaFederal(item.dataPagTaxaFederal || '');
 
     setPerVendaDireta(item.perVendaDireta || '');
-    setPerBonusPagamento(item.perBonusPagamento || ''); // PUXA A EDIÇÃO DA PORCENTAGEM
+    setPerBonusPagamento(item.perBonusPagamento || ''); 
     setPerRepresentante(item.perRepresentante || '');
     setRepresentanteSelecionado(item.representante || '');
     setPerEncarregada(item.perEncarregada || '');
@@ -404,7 +402,6 @@ function Painel() {
                   <input type="number" step="any" placeholder="Ex: 7" value={perVendaDireta} onChange={(e) => setPerVendaDireta(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: '5px' }} />
                 </div>
                 
-                {/* CAMPO NOVO QUE SÓ APARECE NAS CONDIÇÕES CERTAS */}
                 {mostrarCampoBonus && (
                   <div style={{ flex: '1 1 150px', backgroundColor: '#fff3cd', padding: '10px', borderRadius: '4px', border: '1px dashed #fd7e14' }}>
                     <label style={{...labelStyle, color: '#fd7e14', marginTop: 0}}>% Bônus Pagamento</label>
