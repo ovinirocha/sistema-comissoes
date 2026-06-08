@@ -125,13 +125,13 @@ O sistema distribui contratos automaticamente pelas semanas do mês:
 ## 1. Clone o repositório
 
 ```bash
-git clone https://github.com/seu-usuario/seu-repositorio.git
+git clone https://github.com/ovinirocha/sistema-comissoes.git
 ```
 
 Entre na pasta do projeto:
 
 ```bash
-cd seu-repositorio
+cd sistema-comissoes
 ```
 
 ---
