@@ -280,6 +280,9 @@ function Painel() {
             {isFinanceiro && (
               <Link to="/bonus" style={btnBonus}>🟠 Bônus Pagamento</Link>
             )}
+            {isFinanceiro && (
+  <Link to="/exportador" style={{ padding: '10px 15px', backgroundColor: '#4f46e5', color: 'white', textDecoration: 'none', borderRadius: '4px', fontWeight: 'bold', display: 'flex', alignItems: 'center' }}>⚙️ Planilha Customizada</Link>
+)}
             <button type="button" onClick={handleSair} style={btnVermelho}>Sair</button>
           </div>
         </div>

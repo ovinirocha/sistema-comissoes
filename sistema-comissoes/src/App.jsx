@@ -4,16 +4,17 @@ import Painel from './pages/Painel';
 import Relatorio from './pages/Relatorio';
 import Geral from './pages/Geral';
 import Bonus from './pages/Bonus';
-import PrivateRoute from './pages/PrivateRoute'; // <--- Importe o porteiro
+import ExportadorPersonalizado from './pages/ExportadorPersonalizado'; 
+import PrivateRoute from './pages/PrivateRoute'; 
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Rota pública: Todo mundo vê */}
+        {/* Rota pública: Tela de Login */}
         <Route path="/" element={<Login />} />
 
-        {/* Rotas protegidas: Só entra se estiver logado */}
+        {/* Rotas blindadas: O PrivateRoute bloqueia quem não tá logado */}
         <Route path="/painel" element={
           <PrivateRoute><Painel /></PrivateRoute>
         } />
@@ -25,6 +26,9 @@ function App() {
         } />
         <Route path="/bonus" element={
           <PrivateRoute><Bonus /></PrivateRoute>
+        } />
+        <Route path="/exportador" element={
+          <PrivateRoute><ExportadorPersonalizado /></PrivateRoute>
         } />
       </Routes>
     </BrowserRouter>
